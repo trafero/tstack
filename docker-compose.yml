@@ -9,7 +9,8 @@ services:
       - certs:/certs
 
   tserve:
-    build: .
+    # build: .
+    image: trafero/tstack
     volumes:
       - certs:/certs
     command: >
@@ -24,7 +25,8 @@ services:
       - certs:/certs
 
   treg:
-    build: .
+    # build: .
+    image: trafero/tstack
     volumes:
       - certs:/certs
     command: >

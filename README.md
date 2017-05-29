@@ -9,9 +9,9 @@ Trafero Stack = tstack
 
 ## Services
 
-The fastest way to bring up a working stack is by using docker-compose.
+The fastest way to bring up a working stack is by using [the docker-compose file](https://github.com/trafero/tstack/blob/master/docker-compose.yml).
 
-1. Copy the env.dist file to ```.env``` and modify it as required
+1. Copy the [env.dist file](https://github.com/trafero/tstack/blob/master/env.dist) to ```.env``` and modify it as required
 1. Run ```docker-compose up```
 1. Check the logs with ```docker-compose logs -f```
 

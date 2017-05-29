@@ -1,0 +1,62 @@
+version: '2'
+
+services:
+
+  certs:
+    env_file: .env  # Reads configuration through environment variables
+    image: dougg/certificate-master
+    volumes:
+      - certs:/certs
+
+  tserve:
+    build: .
+    volumes:
+      - certs:/certs
+    command: >
+      /go/bin/tserve
+      -etcdhosts=$ETCD_HOSTS
+      -certfile=/certs/${BROKER_NAME}.crt
+      -keyfile=/certs/${BROKER_NAME}.key
+    ports:
+      - "1883:1883"
+      - "8883:8883"
+    volumes:
+      - certs:/certs
+
+  treg:
+    build: .
+    volumes:
+      - certs:/certs
+    command: >
+      /go/bin/treg
+      -etcdhosts=$ETCD_HOSTS
+      -regkey=$REGISTRATION_KEY
+      -mqtturl=$BROKER_URL
+    ports:
+      - "8000:8000"
+    volumes:
+      - certs:/certs
+
+  etcd:
+    image: quay.io/coreos/etcd:v3.1.8
+    env_file: env.dist
+    command: >
+      /usr/local/bin/etcd
+      -name etcd0
+      -advertise-client-urls http://127.0.0.1:2379
+      -listen-client-urls http://0.0.0.0:2379
+      -initial-advertise-peer-urls http://127.0.0.1:2380
+      -listen-peer-urls http://0.0.0.0:2380
+      -initial-cluster-token etcd-cluster-1
+      -initial-cluster etcd0=http://127.0.0.1:2380
+      -initial-cluster-state new
+      -data-dir=/etcd
+    volumes:
+      - etcd:/etcd
+
+volumes:
+  certs:
+    driver: local
+  etcd:
+    driver: local
+

@@ -1,0 +1,6 @@
+FROM golang:1.8
+ADD . /go/src/github.com/trafero/tstack
+RUN go get github.com/trafero/tstack/cmd/...
+RUN go install github.com/trafero/tstack/cmd/...
+RUN ls -l /go/bin
+

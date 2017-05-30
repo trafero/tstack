@@ -82,18 +82,26 @@ tuser creates a user on the etcd service. Access permissions can be specified on
 
 ### tregister
 
-tregister requests a new user from the registration service, then writes the new user's details to a YAML configuration file for use by other applications.  The registration service also gives it a client TLS certificate and CA certificate (which applications can use to verify the identity of the tserve service.
+tregister requests a new user from the registration service, then writes the new user's details to a YAML configuration file for use by other applications.  The registration service also gives it a client TLS certificate and CA certificate which applications can use to verify the identity of the tserve service.
 
-tregister creates a configuration file in /etc/trafero, creating this directory if it needs to. If you're running as a non-privileged used, you'll need to create the configuration directory first:
+tregister creates a configuration file in __/etc/trafero__, creating this directory if it needs to. If you're running as a non-privileged user, you'll need to create the configuration directory first:
 
 ```
 sudo mkdir /etc/trafero && sudo chown $USER /etc/trafero
 ```
-Now run tregister, for example:
+Now run tregister, as below, changing TSERVE_HOST for the hostname of the tserve service, and PLEASE_CHANGE_ME_TOO to the registration key found in your .env file.
 
 ```
-tregister \
--regkey=PLEASE_CHANGE_ME_TOO \
--regservice=http://localhost:8000/register.json \
--verifytls=false
+docker run -v /etc/trafero:/etc/trafero trafero/tstack \
+  tregister                                            \
+  -regkey=PLEASE_CHANGE_ME_TOO                         \
+  -regservice=http://TSERVE_HOST:8000/register.json    \
+  -verifytls=false
 ```
+
+/etc/trafero should now contain:
+
+* ```settings.yml``` -  a settings file, containing login details to the tserve MQQT broker
+* ```ca.crt``` - A CA certificate that can be used to check the authenticity of the tserve MQQT broker
+*  ```client.crt``` - A TLS certificate, should a client service need one to connect to the broker
+*  ```client.key``` - A TLS key, should the client need one

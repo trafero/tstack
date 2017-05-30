@@ -5,9 +5,9 @@ Trafero Stack = tstack
 * Requires Go >= 1.8
 * CLI applications are under the cmd directory
 
-## 2 Minute Guide
+## Getting Started
 
-## Services
+### Services
 
 The fastest way to bring up a working stack is by using [the docker-compose file](https://github.com/trafero/tstack/blob/master/docker-compose.yml).
 
@@ -15,13 +15,52 @@ The fastest way to bring up a working stack is by using [the docker-compose file
 1. Run ```docker-compose up```
 1. Check the logs with ```docker-compose logs -f```
 
-Now you have a working MQTT broker, listening on ports 1883 (insecure) and 8883 (secure).  You also have a registration service (called treg) running on port 8000.
+Now you have a working MQTT broker, listening on ports 1883 (insecure) and 8883 (secure).  You also have a registration service (called treg) running on port 8000, and an etcd service which is used to hold user data.
 
-## Adding a user
+### Adding a normal user
 
-TODO
+Described here is a manual method for adding a use, simply to demonstrate the treg service. Usually the tregister command line tool would be used to simplify this process, saving the new user's configuration and the certificates for later use.
 
-## Connecting a device
+A call to the registration service creates a user and adds that user to the etcd authentication and authorization database (for use by tserve).  Each user (which could be a device in the world of IoT) is given rights to only access message topics that start with their own username.
+
+Here is an example of a request to the service:
+
+```
+echo '{
+	"RegistrationKey": "PLEASE_CHANGE_ME_TOO",
+	"DeviceType": "Test"
+}' |  curl -d @- localhost:8000/register.json
+```
+
+This returns some JSON that contains:
+
+* ```Name``` - a new username
+* ```Password``` - a new password (a bycrypt hasj of the password is stored in etcd)
+* ```Broker``` - the URL of the broker service to connect to
+* ```Cert``` - a TLS certificate that the client can use
+* ```Key``` - a TLS key that the client can use
+* ```Ca``` - a CA certificate that the client can use to authenticate the Broker
+
+
+The user details can also been seen in etcd (replace USER below with the Name from the returned JSON:
+
+```
+docker exec tstack_etcd_1 etcdctl get /user/USER
+```
+
+### Adding a user with greater privileges
+
+The tuser command line tool can create users with custom privileges.  This is useful for creating users for tools such as consumers that read all messages and process the data for back end storage.
+
+## Securing The Services
+
+Some of Tstack is designed to be internet facing. Some should not be.
+
+* tserve (the MQTT broker) should have it's secure port (8883) exposed, but not its insecure port
+* treg is an HTTP service. It should sit behind a proxy serving just HTTPS, such as [an NGINX server that proxies traffic from HTTPS to HTTP](https://hub.docker.com/r/dougg/nginx-letsencrypt-proxy/)
+* the etcd service should not be public facing
+
+## Connecting to the MQTT service
 
 TODO
 

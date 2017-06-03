@@ -43,12 +43,11 @@ func main() {
 }
 
 func analog(port int) {
-	var reading float64
-
-	reading = math.Sin(math.Pi / float64(ports) * float64(port))
+	var angle float64
+	angle = math.Pi / float64(ports) * float64(port)
 	for {
-		mq.PublishMessage(s.Username+"/analog/"+strconv.Itoa(port), strconv.FormatFloat(reading, 'f', 4, 64))
-		reading = reading + math.Sin(math.Pi/100)
+		mq.PublishMessage(s.Username+"/analog/"+strconv.Itoa(port), strconv.FormatFloat(math.Sin(angle), 'f', 4, 64))
+		angle = angle + math.Pi/10
 		time.Sleep(5 * time.Second)
 	}
 }

@@ -72,7 +72,7 @@ func NewInsecure(s *settings.Settings) (m *MQTT, err error) {
 }
 
 func (m *MQTT) controlMessageHandler(client paho.Client, msg paho.Message) {
-	log.Printf("Received topic: %s message: %s", msg.Topic(), msg.Payload())
+	// log.Printf("Received topic: %s message: %s", msg.Topic(), msg.Payload())
 	if m.handler != nil {
 		message := Message{
 			Topic:   string(msg.Topic()),
@@ -88,7 +88,7 @@ func (m *MQTT) SetHandler(f func(Message)) {
 
 // sendMessage sends an MQTT message.
 func (m *MQTT) PublishMessage(topic string, payload string) error {
-	log.Printf("Sending topic %s and payload %s", topic, payload)
+	// log.Printf("Sending topic %s and payload %s", topic, payload)
 	token := m.client.Publish(topic, qos, false, payload)
 	if token.Error() != nil {
 		return token.Error()

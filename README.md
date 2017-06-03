@@ -42,15 +42,25 @@ This returns some JSON that contains:
 * ```Ca``` - a CA certificate that the client can use to authenticate the Broker
 
 
-The user details can also been seen in etcd (replace USER below with the Name from the returned JSON:
+The user details can also been seen in etcd, as in the example below, which runs a command in the existing etcd container. Replace USER below with the Name from the returned JSON:
 
 ```
-docker exec tstack_etcd_1 etcdctl get /user/USER
+docker-compose exec etcd etcdctl get /user/USER
 ```
 
 ### Adding a user with greater privileges
 
 The tuser command line tool can create users with custom privileges.  This is useful for creating users for tools such as consumers that read all messages and process the data for back end storage.
+
+The tuser binary exists in the same image used for tserve, so can user docker-compose to bring up a new tserve container and run the tuser command.  Here's an example, creating a user called "MASTER" with a password of "PLEASE_CHANGE_ME", which you should, of course change to something more appropriate!
+
+```
+docker-compose run tserve /go/bin/tuser \
+  -etcdhosts=http://etcd.tstack_default:2379 \
+  -username=MASTER \
+  -password=PLEASE_CHANGE_ME \
+  -rights='.*'
+```
 
 ## Securing The Services
 
@@ -62,7 +72,38 @@ Some of Tstack is designed to be internet facing. Some should not be.
 
 ## Connecting to the MQTT service
 
-TODO
+tregister or tuser can be used to create a user, but how do you use that new user to access the MQTT service?
+
+If you wish to use golang, there are some examples in the src/client/examples directory, which make use of the configuration file provided by tregister. There are also a couple of read-made consumers in the src/consumer directory.
+
+Other applications such as [Mosquitto](https://mosquitto.org/) can also be used, since tserve is a standard offers a standard MQTT service.
+
+Here is an example of using Mosquitto to subscribe to all messages. Note that we're using the insecure communication port which should not be exposed beyond the docker host.
+```
+mosquitto_sub \
+ -h localhost \
+ -p 1883 \
+ -v \
+ -u MASTER -P PLEASE_CHANGE_ME \
+ -t \# \
+ -V mqttv311
+```
+
+Here is an example using the secure port, and the certificate that was created in /etc/trafero. The USERNAME and PASSWORD settings should be changed to the values found in /etc/trafero/settings.yml.
+
+```
+mosquitto_pub \
+ --cafile /etc/trafero/ca.crt \
+ --cert /etc/trafero/client.crt \
+ --key /etc/trafero/client.key \
+ -h localhost \
+ -p 8883 \
+ -u USERNAME -P 'PASSWORD' \
+ -V mqttv311 \
+ --insecure \
+ -t CPW-639/test/message \
+ -m "Hello world"
+```
 
 ## Applications
 
@@ -79,6 +120,7 @@ tserve is an MQTT broker, which uses etcd as its backend authentication service.
 ### tuser
 
 tuser creates a user on the etcd service. Access permissions can be specified on the command line.
+
 
 ### tregister
 

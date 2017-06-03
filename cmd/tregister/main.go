@@ -44,7 +44,7 @@ func main() {
 		}
 	}
 
-	if _, err := os.Stat(settingsFile); ! os.IsNotExist(err) {
+	if _, err := os.Stat(settingsFile); !os.IsNotExist(err) {
 		log.Fatal("ERROR: Settings file \"" + settingsFile + "\" already exists")
 	}
 

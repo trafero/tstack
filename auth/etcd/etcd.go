@@ -57,7 +57,7 @@ func (t *Etcd) User(username string) (u auth.User, err error) {
 		nil,
 	)
 	if err != nil {
-		log.Printf("Error retrtieving user %s: %s", username, err)
+		log.Printf("Could not retrieve user %s from the database: %s", username, err)
 		return u, err
 	}
 
@@ -86,6 +86,7 @@ func (t *Etcd) setUser(u auth.User) (err error) {
 		log.Printf("Error saving user %s: %s", u.Username, err)
 		return err
 	}
+	log.Printf("User %s saved", u.Username)
 
 	return nil
 }

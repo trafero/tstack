@@ -10,15 +10,19 @@ import (
 	"github.com/trafero/tstack/consume/influxdb"
 	"github.com/trafero/tstack/consume/stdout"
 	"log"
+	"strings"
 )
 
 var username, password, mqtturl, topic, ctype string
+var tlscertfile, tlskeyfile, cacertfile string
 
 var influxhost, influxdatabase string
 var influxport int
 
 var graphitehost string
 var graphiteport int
+
+var verifytls bool
 
 var consumer consume.Consume
 
@@ -41,14 +45,29 @@ func init() {
 
 	flag.StringVar(&ctype, "ctype", "", "Consumer type. One of influxdb, graphite, stdout")
 
+	flag.StringVar(&tlscertfile, "tlscertfile", "/etc/trafero/client.crt", "TLS Cert file")
+	flag.StringVar(&tlskeyfile, "tlskeyfile", "/etc/trafero/client.key", "TLS Key file")
+	flag.StringVar(&cacertfile, "cacrtfile", "/etc/trafero/ca.crt", "CA Cert file")
+
+	flag.BoolVar(&verifytls, "verifytls", true, "Verify MQTT certificate")
+
 	flag.Parse()
 }
 
 func main() {
 
 	var err error
+	var secure bool // secure connection or not
 
 	log.Printf("Using broker %s", mqtturl)
+
+	if strings.HasPrefix(mqtturl, "tcp:") {
+		secure = false
+	} else if strings.HasPrefix(mqtturl, "ssl:") {
+		secure = true
+	} else {
+		log.Fatal(`Unknown broker URL type. Should start with "tls:" or "tcp:"`)
+	}
 
 	switch ctype {
 	case "influxdb":
@@ -75,14 +94,27 @@ func main() {
 		log.Fatal(err)
 	}
 
-	// TODO add ability to use secure message handler
 	s := &settings.Settings{
 		Username: username,
 		Password: password,
 		Broker:   mqtturl,
+
+		// Only used for TLS
+		TlsCertFile: tlscertfile,
+		TlsKeyFile:  tlskeyfile,
+		CaCertFile:  cacertfile,
+		VerifyTls:   verifytls,
 	}
+
 	log.Printf("Connecting to broker %s", s.Broker)
-	m, err := mqtt.NewInsecure(s)
+	var m *mqtt.MQTT
+
+	if secure {
+		m, err = mqtt.New(s)
+	} else {
+		m, err = mqtt.NewInsecure(s)
+	}
+
 	checkErr(err)
 
 	m.SetHandler(consumer.ControlMessageHandler)

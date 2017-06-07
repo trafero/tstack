@@ -10,7 +10,7 @@ import (
 	"github.com/trafero/tstack/consume/influxdb"
 	"github.com/trafero/tstack/consume/stdout"
 	"log"
-	"strings"
+	"net/url"
 )
 
 var username, password, mqtturl, topic, ctype string
@@ -22,7 +22,7 @@ var influxport int
 var graphitehost string
 var graphiteport int
 
-var verifytls bool
+var verifytls, useconfig bool
 
 var consumer consume.Consume
 
@@ -34,7 +34,7 @@ func init() {
 	flag.StringVar(&username, "username", "", "Username for MQTT broker")
 	flag.StringVar(&password, "password", "", "Password for MQTT broker")
 	flag.StringVar(&mqtturl, "mqtturl", "tcp://localhost:1883", "URL for MQTT broker")
-	flag.StringVar(&topic, "topic", "#", "Topic to subscribe to")
+	flag.StringVar(&topic, "topic", "", "Topic to subscribe to. Defaults to USERNAME/#")
 
 	flag.StringVar(&influxhost, "influxhost", "localhost", "InfluxDB hostname")
 	flag.IntVar(&influxport, "influxport", 8086, "InfluxDB port")
@@ -50,24 +50,51 @@ func init() {
 	flag.StringVar(&cacertfile, "cacrtfile", "/etc/trafero/ca.crt", "CA Cert file")
 
 	flag.BoolVar(&verifytls, "verifytls", true, "Verify MQTT certificate")
+	flag.BoolVar(&useconfig, "useconfig", false, "Use tstack configuration file")
 
 	flag.Parse()
+
 }
 
 func main() {
 
 	var err error
 	var secure bool // secure connection or not
+	var s *settings.Settings
 
-	log.Printf("Using broker %s", mqtturl)
-
-	if strings.HasPrefix(mqtturl, "tcp:") {
-		secure = false
-	} else if strings.HasPrefix(mqtturl, "ssl:") {
-		secure = true
+	// Read settings into s
+	if useconfig {
+		s, err = settings.Read()
+		if err != nil {
+			flag.Usage()
+			log.Fatal(err)
+		}
 	} else {
-		log.Fatal(`Unknown broker URL type. Should start with "tls:" or "tcp:"`)
+
+		s = &settings.Settings{
+			Username: username,
+			Password: password,
+			Broker:   mqtturl,
+
+			// Only used for TLS
+			TlsCertFile: tlscertfile,
+			TlsKeyFile:  tlskeyfile,
+			CaCertFile:  cacertfile,
+			VerifyTls:   verifytls,
+		}
+
 	}
+
+	// Set topic to receive everything for that user, if it hasn'y been set
+	// already
+	if topic == "" {
+		topic = s.Username + `/#`
+	}
+
+	log.Printf("Using broker %s and topic %s.", s.Broker, topic)
+
+	secure, err = isSecureUrl(s.Broker)
+	checkErr(err)
 
 	switch ctype {
 	case "influxdb":
@@ -89,22 +116,7 @@ func main() {
 		err = errors.New("Please use a valid consumer type (ctype option)")
 	}
 
-	if err != nil {
-		flag.Usage()
-		log.Fatal(err)
-	}
-
-	s := &settings.Settings{
-		Username: username,
-		Password: password,
-		Broker:   mqtturl,
-
-		// Only used for TLS
-		TlsCertFile: tlscertfile,
-		TlsKeyFile:  tlskeyfile,
-		CaCertFile:  cacertfile,
-		VerifyTls:   verifytls,
-	}
+	checkErr(err)
 
 	log.Printf("Connecting to broker %s", s.Broker)
 	var m *mqtt.MQTT
@@ -122,6 +134,27 @@ func main() {
 
 	// Go to forever land
 	select {}
+}
+
+// isSecureUrl determines if the given URL has a secure scheme type
+func isSecureUrl(urlstring string) (bool, error) {
+	u, err := url.Parse(urlstring)
+	if err != nil {
+		return false, err
+	}
+
+	switch u.Scheme {
+	case "tcp":
+		return false, nil
+	case "ssl":
+		return true, nil
+	case "http":
+		return false, nil
+	case "https":
+		return true, nil
+	default:
+		return false, errors.New("Unknown broker URL type.")
+	}
 }
 
 func checkErr(err error) {

@@ -10,7 +10,6 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
-	"regexp"
 	"strings"
 	"time"
 )
@@ -86,8 +85,7 @@ func register(w http.ResponseWriter, r *http.Request) {
 	err = authService.AddOrUpdateUser(id, password)
 	checkErr(err)
 
-	regex := "^" + regexp.QuoteMeta(id) + `\/.*$`
-	err = authService.SetRights(id, regex)
+	err = authService.SetRights(id, id + `/#`)
 	checkErr(err)
 
 	err = authService.SetGroup(id, req_data.DeviceType)

@@ -121,6 +121,13 @@ tserve is an MQTT broker, which uses etcd as its backend authentication service.
 
 tuser creates a user on the etcd service. Access permissions can be specified on the command line.
 
+### tconsume
+
+MQTT consumer with multiple backends. Currently implemented:
+
+* stdout
+* influxdb
+* graphite
 
 ### tregister
 

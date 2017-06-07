@@ -7,21 +7,20 @@ import (
 	"io"
 	"log"
 	"net"
-	"regexp"
 	"strings"
 	"sync"
 )
 
 // An IncomingConn represents a connection into a Server.
 type incomingConn struct {
-	svr             *Server
-	conn            net.Conn
-	jobs            chan job
-	clientid        string
-	Done            chan struct{}
-	username        string
-	auth            auth.Auth      // struct for authentication functions
-	rightsValidator *regexp.Regexp // User access regex
+	svr      *Server
+	conn     net.Conn
+	jobs     chan job
+	clientid string
+	Done     chan struct{}
+	username string
+	auth     auth.Auth // struct for authentication functions
+	rights   string    // User rights
 }
 
 var clients = make(map[string]*incomingConn)
@@ -177,8 +176,6 @@ func (c *incomingConn) reader() {
 
 func (c *incomingConn) connect(m *proto.Connect) {
 
-	var err error
-
 	rc := proto.RetCodeAccepted
 
 	if (m.ProtocolName != "MQIsdp" || m.ProtocolVersion != 3) &&
@@ -195,21 +192,15 @@ func (c *incomingConn) connect(m *proto.Connect) {
 		rc = proto.RetCodeBadUsernameOrPassword
 		log.Printf("Connection refused for %v: %v", c.conn.RemoteAddr(), ConnectionErrors[rc])
 	} else {
-
-		// Set user rights validation regex for later use against topics
-		rights := c.auth.Rights(m.Username)
-		c.rightsValidator, err = regexp.Compile(rights)
-		if err != nil {
-			rc = proto.RetCodeNotAuthorized
-			log.Printf("Rights validation did not compile %v: %v", c.conn.RemoteAddr(), ConnectionErrors[rc])
-		}
-
 		// Check client id.
 		if len(m.ClientId) < 1 || len(m.ClientId) > 23 {
 			rc = proto.RetCodeIdentifierRejected
 		}
 		c.clientid = m.ClientId
 	}
+
+	// Get user acccess rights from authentication service
+	c.rights = c.auth.Rights(m.Username)
 
 	// Disconnect existing connections.
 	if existing := c.add(); existing != nil {
@@ -245,23 +236,23 @@ func (c *incomingConn) publish(m *proto.Publish) {
 
 	// TODO: Proper QoS support
 	if m.Header.QosLevel != proto.QosAtMostOnce {
-		log.Printf("reader: no support for QoS %v yet", m.Header.QosLevel)
+		log.Printf("No support for QoS %v yet", m.Header.QosLevel)
 		return
 	}
 	if m.Header.QosLevel != proto.QosAtMostOnce && m.MessageId == 0 {
 		// Invalid message ID. See MQTT-2.3.1-1.
-		log.Printf("reader: invalid MessageId in PUBLISH.")
+		log.Printf("Invalid MessageId in PUBLISH.")
 		return
 	}
 
 	// Validate topic against compiled rights regex
-	if !c.rightsValidator.MatchString(m.TopicName) {
+	if !validate(m.TopicName, c.rights) {
 		log.Printf("User %s is unauthorized to write to topic %s", c.username, m.TopicName)
 		return
 	}
 
 	if isWildcard(m.TopicName) {
-		log.Print("reader: ignoring PUBLISH with wildcard topic ", m.TopicName)
+		log.Print("Ignoring PUBLISH with wildcard topic ", m.TopicName)
 	} else {
 		log.Printf("Message to topic %s", m.TopicName)
 		c.svr.subs.submit(c, m)
@@ -281,7 +272,7 @@ func (c *incomingConn) subscribe(m *proto.Subscribe) {
 	}
 	if m.MessageId == 0 {
 		// Invalid message ID. See MQTT-2.3.1-1.
-		log.Printf("reader: invalid MessageId in SUBSCRIBE.")
+		log.Printf("Invalid MessageId in SUBSCRIBE.")
 		return
 	}
 
@@ -290,16 +281,20 @@ func (c *incomingConn) subscribe(m *proto.Subscribe) {
 		TopicsQos: make([]proto.QosLevel, len(m.Topics)),
 	}
 	for i, tq := range m.Topics {
-		// TODO: Handle varying QoS correctly
-		c.svr.subs.add(tq.Topic, c)
-		suback.TopicsQos[i] = proto.QosAtMostOnce
+		if !validate(tq.Topic, c.rights) {
+			log.Printf("User %s is unauthorized to subscribe to topic %s", c.username, tq.Topic)
+		} else {
+			// TODO: Handle varying QoS correctly
+			c.svr.subs.add(tq.Topic, c)
+			suback.TopicsQos[i] = proto.QosAtMostOnce
+		}
 	}
 	c.submit(suback)
 
 	// Process retained messages.
 	for _, tq := range m.Topics {
 		// Check each topic matches rights regex
-		if !c.rightsValidator.MatchString(tq.Topic) {
+		if !validate(tq.Topic, c.rights) {
 			log.Printf("User %s is unauthorized to subscribe to topic %s", c.username, tq.Topic)
 		} else {
 			// Subscribe to topic
@@ -310,7 +305,7 @@ func (c *incomingConn) subscribe(m *proto.Subscribe) {
 func (c *incomingConn) unsubscribe(m *proto.Unsubscribe) {
 	if m.Header.QosLevel != proto.QosAtMostOnce && m.MessageId == 0 {
 		// Invalid message ID. See MQTT-2.3.1-1.
-		log.Printf("reader: invalid MessageId in UNSUBSCRIBE.")
+		log.Printf("Invalid MessageId in UNSUBSCRIBE.")
 		return
 	}
 	for _, t := range m.Topics {
@@ -402,5 +397,30 @@ func (w wild) valid() bool {
 			return false
 		}
 	}
+	return true
+}
+
+func validate(topic string, rights string) bool {
+
+	log.Printf("Validating topic %s againsts rights %s", topic, rights)
+
+	topiclevels := strings.Split(topic, "/")
+	rightslevels := strings.Split(rights, "/")
+	for i := 0; i < len(topiclevels); i++ {
+
+		// Rights levels are not deep enough
+		if len(rightslevels) < i {
+			return false
+		}
+		// Wildcard here on in, so match everything
+		if rightslevels[i] == "#" {
+			return true
+		}
+		// Topics do not match, and not a topic level wildcard
+		if rightslevels[i] != "+" && rightslevels[i] != topiclevels[i] {
+			return false
+		}
+	}
+	// Matched all of topic
 	return true
 }

@@ -11,8 +11,6 @@ import (
 const (
 	settingsFile      = "/etc/trafero/settings.yml"
 	settingsDirectory = "/etc/trafero/"
-	tlscertfile       = "/etc/trafero/client.crt"
-	tlskeyfile        = "/etc/trafero/client.key"
 	cacertfile        = "/etc/trafero/ca.crt"
 )
 
@@ -63,19 +61,11 @@ func registerDevice() (s *settings.Settings, err error) {
 	s = &settings.Settings{
 		DeviceType:  devtype,
 		VerifyTls:   verifytls,
-		TlsCertFile: tlscertfile,
-		TlsKeyFile:  tlskeyfile,
 		CaCertFile:  cacertfile,
 	}
 
 	reply, err := Register(regservice, regkey, devtype)
 	if err != nil {
-		return s, err
-	}
-	if err := ioutil.WriteFile(s.TlsCertFile, []byte(reply.Cert), 0644); err != nil {
-		return s, err
-	}
-	if err := ioutil.WriteFile(s.TlsKeyFile, []byte(reply.Key), 0644); err != nil {
 		return s, err
 	}
 	if err := ioutil.WriteFile(s.CaCertFile, []byte(reply.Ca), 0644); err != nil {

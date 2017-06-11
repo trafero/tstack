@@ -18,8 +18,6 @@ type Reply struct {
 	Name     string
 	Password string
 	Broker   string
-	Cert     string
-	Key      string
 	Ca       string
 }
 

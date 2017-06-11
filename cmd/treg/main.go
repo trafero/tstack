@@ -15,13 +15,14 @@ import (
 )
 
 var authService auth.Auth
-var mqtturl, regkey, etcdhosts, port string
+var mqtturl, regkey, etcdhosts, port, cacertfile string
 
 func init() {
 	flag.StringVar(&regkey, "regkey", "", "Registration key")
 	flag.StringVar(&etcdhosts, "etcdhosts", "", "list of etcd endpoints. e.g. 'http://etcd0:2379 http://etcd1:2379'")
 	flag.StringVar(&mqtturl, "mqtturl", "tcp://localhost:1883", "URL for MQTT broker")
 	flag.StringVar(&port, "port", "8000", "Port to listen on")
+	flag.StringVar(&cacertfile, "cacertfile", "", "CA certificate location")
 	flag.Parse()
 }
 
@@ -46,8 +47,6 @@ type registration_reply struct {
 	Name     string
 	Password string
 	Broker   string
-	Cert     string
-	Key      string
 	Ca       string
 }
 type registration_request struct {
@@ -92,22 +91,19 @@ func register(w http.ResponseWriter, r *http.Request) {
 	checkErr(err)
 
 	// Read TLS certs into struct for output
-	cert, err := ioutil.ReadFile("/certs/client.crt")
-	checkErr(err)
-	key, err := ioutil.ReadFile("/certs/client.key")
-	checkErr(err)
-	ca, err := ioutil.ReadFile("/certs/ca.crt")
-	checkErr(err)
-
+	ca := ""
+	if cacertfile != "" {
+		cabytes, err :=ioutil.ReadFile(cacertfile)
+		checkErr(err)
+		ca = string(cabytes)
+	}
 	// Output
 	w.Header().Set("Content-Type", "application/json")
 
 	regData := registration_reply{
 		Name:     id,
 		Broker:   mqtturl,
-		Cert:     string(cert),
-		Key:      string(key),
-		Ca:       string(ca),
+		Ca:       ca,
 		Password: password,
 	}
 	js, err := json.Marshal(regData)

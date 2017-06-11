@@ -44,9 +44,6 @@ func init() {
 	flag.IntVar(&graphiteport, "graphiteport", 2003, "Graphite port")
 
 	flag.StringVar(&ctype, "ctype", "", "Consumer type. One of influxdb, graphite, stdout")
-
-	flag.StringVar(&tlscertfile, "tlscertfile", "/etc/trafero/client.crt", "TLS Cert file")
-	flag.StringVar(&tlskeyfile, "tlskeyfile", "/etc/trafero/client.key", "TLS Key file")
 	flag.StringVar(&cacertfile, "cacrtfile", "/etc/trafero/ca.crt", "CA Cert file")
 
 	flag.BoolVar(&verifytls, "verifytls", true, "Verify MQTT certificate")
@@ -75,10 +72,7 @@ func main() {
 			Username: username,
 			Password: password,
 			Broker:   mqtturl,
-
 			// Only used for TLS
-			TlsCertFile: tlscertfile,
-			TlsKeyFile:  tlskeyfile,
 			CaCertFile:  cacertfile,
 			VerifyTls:   verifytls,
 		}

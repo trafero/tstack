@@ -16,8 +16,6 @@ type Settings struct {
 	Username    string
 	Password    string
 	Broker      string
-	TlsCertFile string
-	TlsKeyFile  string
 	CaCertFile  string
 	DeviceType  string
 	VerifyTls   bool

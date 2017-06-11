@@ -28,7 +28,7 @@ func New(s *settings.Settings) (m *MQTT, err error) {
 	m = &MQTT{}
 
 	// Create paho MQTT Client
-	tlsconfig, err := tls.TLSConfig(s.CaCertFile, s.TlsCertFile, s.TlsKeyFile)
+	tlsconfig, err := tls.TLSClientConfig(s.CaCertFile)
 	if err != nil {
 		return nil, err
 	}

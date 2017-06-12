@@ -2,7 +2,7 @@
 
 Tstack consists of several components:
 
-<img src="tstack.png"  width="600px" />
+<img src="tstack.png"  width="100%" />
 
 * [tserve](tserve.md) - An MQTT broker
 * [treg](treg.md) - RESTful registration service

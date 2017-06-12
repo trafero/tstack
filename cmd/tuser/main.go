@@ -11,9 +11,9 @@ var etcdhosts, username, password, rights string
 
 func init() {
 	flag.StringVar(&etcdhosts, "etcdhosts", "", "list of etcd endpoints. e.g. 'http://etcd0:2379 http://etcd1:2379'")
-	flag.StringVar(&username, "username", "", "Username")
-	flag.StringVar(&password, "password", "", "Password")
-	flag.StringVar(&rights, "rights", "", "Access rghts as topic expression")
+	flag.StringVar(&username, "username", "", "Username for new user")
+	flag.StringVar(&password, "password", "", "Password for new user")
+	flag.StringVar(&rights, "rights", "", "Access rights as topic expression")
 	flag.Parse()
 }
 

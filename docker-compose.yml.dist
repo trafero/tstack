@@ -2,46 +2,79 @@ version: '2'
 
 services:
 
-  certs:
-    env_file: .env  # Reads configuration through environment variables
-    image: dougg/certificate-master
+  # Proxy to terminate TLS, sitting in front of treg. The proxy uses
+  # letsencrypt to create certificates which are also used for tserve
+  proxy:
+    image: dougg/nginx-letsencrypt-proxy
+    env_file: .env
+    ports:
+        - "80:80"
+        - "443:443"
     volumes:
-      - certs:/certs
+        - letsencrypt:/etc/letsencrypt
 
+  # tserve MQTT broker
   tserve:
     build: .
-    #image: trafero/tstack
+    # image: trafero/tstack
     volumes:
-      - certs:/certs
+      - letsencrypt::/etc/letsencrypt
     command: >
       /go/bin/tserve
       -etcdhosts=$ETCD_HOSTS
-      -certfile=/certs/${BROKER_NAME}.crt
-      -keyfile=/certs/${BROKER_NAME}.key
+      -cafile=/etc/letsencrypt/live/${BROKER_NAME}/fullchain.pem
+      -certfile=/etc/letsencrypt/live/${BROKER_NAME}/cert.pem
+      -keyfile=/etc/letsencrypt/live/${BROKER_NAME}/privkey.pem
     ports:
       - "1883:1883"
       - "8883:8883"
     volumes:
-      - certs:/certs
+      - letsencrypt:/etc/letsencrypt
 
+  # Registration service
   treg:
     build: .
-    #image: trafero/tstack
+    # image: trafero/tstack
     volumes:
-      - certs:/certs
+      - letsencrypt:/etc/letsencrypt
     command: >
       /go/bin/treg
       -etcdhosts=$ETCD_HOSTS
       -regkey=$REGISTRATION_KEY
       -mqtturl=$BROKER_URL
+      -cacertfile=/etc/letsencrypt/live/${BROKER_NAME}/fullchain.pem
     ports:
       - "8000:8000"
     volumes:
-      - certs:/certs
+      - letsencrypt:/etc/letsencrypt
 
+  # Add a user for the consumer
+  consumeruser:
+    build: .
+    # image: trafero/tstack
+    command: >
+      /go/bin/tuser
+      -etcdhosts=$ETCD_HOSTS
+      -password=$CONSUMER_PASSWORD
+      -username=$CONSUMER_USERNAME
+      -rights="#"
+
+  # Consumes messages and adds them to graphite
+  consumer:
+    build: .
+    #image: trafero/tstack
+    command: >
+      /go/bin/tconsume
+      -ctype=graphite
+      -username=$CONSUMER_USERNAME
+      -password=$CONSUMER_PASSWORD
+      -mqtturl=tcp://tserve:1883/
+      -topic="#"
+      -graphitehost=graphite
+  
+  # Backend storage for treg users
   etcd:
     image: quay.io/coreos/etcd:v3.1.8
-    env_file: env.dist
     command: >
       /usr/local/bin/etcd
       -name etcd0
@@ -56,63 +89,35 @@ services:
     volumes:
       - etcd:/etcd
 
+  # Frontend to Graphite
+  grafana:
+    image: grafana/grafana
+    restart: always
+    ports:
+        - "3000:3000"
+    volumes:
+        - grafana:/var/lib/grafana
+    environment:
+        - GF_SECURITY_ADMIN_PASSWORD=$GRAFANA_ADMIN_PASSWORD
+        - GF_INSTALL_PLUGINS=briangann-gauge-panel,natel-discrete-panel,vonage-status-panel
+        - GF_SNAPSHOTS_EXTERNAL_ENABLED=false
+        - GF_USERS_AUTO_ASSIGN_ORG=true
+        - GF_USERS_ALLOW_SIGN_UP=false
 
+  # Data storage
   graphite:
     image: ennexa/graphite
     restart: always
-    ports:
-        - "8001:8000"
-        - "2003:2003"
-        - "2004:2004"
     volumes:
         - graphite:/opt/graphite/storage/whisper
-        
-        
-  # Add a user for the consumer service
-  consumeruser:
-    image: trafero/tstack
-    env_file: .env
-    command: >
-      /go/bin/tuser
-      -etcdhosts=$ETCD_HOSTS
-      -password=$CONSUMER_PASSWORD
-      -username=$CONSUMER_USERNAME
-      -rights=".*"
-
-  consumer:
-    build: .
-    env_file: .env
-    command: >
-      /go/bin/tconsume
-      -ctype=stdout
-      -username=$CONSUMER_USERNAME
-      -password=$CONSUMER_PASSWORD
-      -mqtturl=ssl://tserve.tstack_default:8883
-      -graphitehost=graphite
-      -influxhost=influxdb
-      -tlscertfile=/certs/client.crt
-      -tlskeyfile=/certs/client.key
-      -cacrtfile=/certs/ca.crt
-      -verifytls=false
-    volumes:
-      - certs:/certs
-
-  influxdb:
-    image: influxdb
-    restart: always
-    env_file: .env
-    ports:
-        - "8086:8086"
-        - "8083:8083"
-    volumes:
-        - influxdb:/var/lib/influxdb
-
+    
 volumes:
-  certs:
-    driver: local
   etcd:
     driver: local
   graphite:
     driver: local
-  influxdb:
+  grafana:
     driver: local
+  letsencrypt:
+    driver: local
+

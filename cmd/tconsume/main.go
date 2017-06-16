@@ -9,8 +9,8 @@ import (
 	"github.com/trafero/tstack/consume/graphite"
 	"github.com/trafero/tstack/consume/influxdb"
 	"github.com/trafero/tstack/consume/stdout"
+	"github.com/trafero/tstack/tstackutil"
 	"log"
-	"net/url"
 )
 
 var username, password, mqtturl, topic, ctype string
@@ -87,7 +87,7 @@ func main() {
 
 	log.Printf("Using broker %s and topic %s.", s.Broker, topic)
 
-	secure, err = isSecureUrl(s.Broker)
+	secure, err = tstackutil.IsSecureUrl(s.Broker)
 	checkErr(err)
 
 	switch ctype {
@@ -128,27 +128,6 @@ func main() {
 
 	// Go to forever land
 	select {}
-}
-
-// isSecureUrl determines if the given URL has a secure scheme type
-func isSecureUrl(urlstring string) (bool, error) {
-	u, err := url.Parse(urlstring)
-	if err != nil {
-		return false, err
-	}
-
-	switch u.Scheme {
-	case "tcp":
-		return false, nil
-	case "ssl":
-		return true, nil
-	case "http":
-		return false, nil
-	case "https":
-		return true, nil
-	default:
-		return false, errors.New("Unknown broker URL type.")
-	}
 }
 
 func checkErr(err error) {

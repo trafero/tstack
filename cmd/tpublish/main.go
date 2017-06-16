@@ -1,12 +1,11 @@
 package main
 
 import (
-	"errors"
 	"flag"
 	"github.com/trafero/tstack/client/mqtt"
 	"github.com/trafero/tstack/client/settings"
+	"github.com/trafero/tstack/tstackutil"
 	"log"
-	"net/url"
 )
 
 var username, password, mqtturl, topic, payload, cacertfile string
@@ -65,7 +64,7 @@ func main() {
 
 	log.Printf("Publishing topic %s.", topic)
 
-	secure, err = isSecureUrl(s.Broker)
+	secure, err = tstackutil.IsSecureUrl(s.Broker)
 	checkErr(err)
 
 	log.Printf("Connecting to broker %s", s.Broker)
@@ -81,27 +80,6 @@ func main() {
 
 	err = m.PublishMessage(topic, payload)
 	checkErr(err)
-}
-
-// isSecureUrl determines if the given URL has a secure scheme type
-func isSecureUrl(urlstring string) (bool, error) {
-	u, err := url.Parse(urlstring)
-	if err != nil {
-		return false, err
-	}
-
-	switch u.Scheme {
-	case "tcp":
-		return false, nil
-	case "ssl":
-		return true, nil
-	case "http":
-		return false, nil
-	case "https":
-		return true, nil
-	default:
-		return false, errors.New("Unknown broker URL type.")
-	}
 }
 
 func checkErr(err error) {

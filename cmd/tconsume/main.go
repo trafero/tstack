@@ -73,8 +73,8 @@ func main() {
 			Password: password,
 			Broker:   mqtturl,
 			// Only used for TLS
-			CaCertFile:  cacertfile,
-			VerifyTls:   verifytls,
+			CaCertFile: cacertfile,
+			VerifyTls:  verifytls,
 		}
 
 	}

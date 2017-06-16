@@ -17,8 +17,8 @@ var addr, addrTls, etcdhosts, certfile, keyfile, cafile string
 
 func init() {
 
-	flag.StringVar(&addr, "addr", "0.0.0.0:1883", "Unencrypted listen address. Can be blank to disable")
-	flag.StringVar(&addrTls, "addrTls", "0.0.0.0:8883", "Encrypted listen address. Can be blank to disable")
+	flag.StringVar(&addr, "addr", "", "Unencrypted listen address. e.g. 0.0.0.0:1883")
+	flag.StringVar(&addrTls, "addrTls", "", "Encrypted listen address. eg. 0.0.0.0:8883")
 	flag.StringVar(&etcdhosts, "etcdhosts", "", "list of etcd endpoints. e.g. 'http://etcd0:2379 http://etcd1:2379'")
 	flag.StringVar(&certfile, "certfile", "/certs/mqtt.crt", "TLS certificate file")
 	flag.StringVar(&keyfile, "keyfile", "/certs/mqtt.key", "TLS key file")
@@ -31,13 +31,13 @@ func main() {
 	// Check command line arguments
 	if etcdhosts == "" {
 		flag.Usage()
-		log.Fatal("Incorrect command line arguments")
+		log.Fatal("etcdhosts argument missing")
 	}
 
-	// Wait for the certificates to be created (by another service)
-	tstackutil.WaitForFile(cafile)
-	tstackutil.WaitForFile(certfile)
-	tstackutil.WaitForFile(keyfile)
+	if addr == "" && addrTls == "" {
+		flag.Usage()
+		log.Fatal("addr and addrTls cannot both be missing")
+	}
 
 	// Authentication using ETCD
 	log.Printf("Using etcd hosts: %s", etcdhosts)
@@ -49,7 +49,7 @@ func main() {
 
 	// Unencrypted MQTT server
 	if addr != "" {
-		log.Println("Running MQTT server on %s", addr)
+		log.Printf("Running MQTT server on %s", addr)
 		l, err := net.Listen("tcp", addr)
 		checkErr(err)
 		svr1 := mqtt.NewServer(a, l, subs)
@@ -58,7 +58,13 @@ func main() {
 
 	// Encrypted MQTT server
 	if addrTls != "" {
-		log.Println("Running encypted MQTT server on %s", addrTls)
+
+		// Wait for the certificates to be created (by another service)
+		tstackutil.WaitForFile(cafile)
+		tstackutil.WaitForFile(certfile)
+		tstackutil.WaitForFile(keyfile)
+
+		log.Printf("Running encypted MQTT server on %s", addrTls)
 		tlsconfig, err := tls.TLSConfig(cafile, certfile, keyfile)
 		checkErr(err)
 		lTls, err := nettls.Listen("tcp", addrTls, tlsconfig)

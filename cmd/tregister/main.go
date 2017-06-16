@@ -59,9 +59,9 @@ func main() {
 func registerDevice() (s *settings.Settings, err error) {
 
 	s = &settings.Settings{
-		DeviceType:  devtype,
-		VerifyTls:   verifytls,
-		CaCertFile:  cacertfile,
+		DeviceType: devtype,
+		VerifyTls:  verifytls,
+		CaCertFile: cacertfile,
 	}
 
 	reply, err := Register(regservice, regkey, devtype)

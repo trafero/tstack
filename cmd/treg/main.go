@@ -84,7 +84,7 @@ func register(w http.ResponseWriter, r *http.Request) {
 	err = authService.AddOrUpdateUser(id, password)
 	checkErr(err)
 
-	err = authService.SetRights(id, id + `/#`)
+	err = authService.SetRights(id, id+`/#`)
 	checkErr(err)
 
 	err = authService.SetGroup(id, req_data.DeviceType)
@@ -93,7 +93,7 @@ func register(w http.ResponseWriter, r *http.Request) {
 	// Read TLS certs into struct for output
 	ca := ""
 	if cacertfile != "" {
-		cabytes, err :=ioutil.ReadFile(cacertfile)
+		cabytes, err := ioutil.ReadFile(cacertfile)
 		checkErr(err)
 		ca = string(cabytes)
 	}

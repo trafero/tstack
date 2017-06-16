@@ -13,12 +13,12 @@ const (
 
 // Settings stored in config file
 type Settings struct {
-	Username    string
-	Password    string
-	Broker      string
-	CaCertFile  string
-	DeviceType  string
-	VerifyTls   bool
+	Username   string
+	Password   string
+	Broker     string
+	CaCertFile string
+	DeviceType string
+	VerifyTls  bool
 }
 
 func Read() (s *Settings, err error) {

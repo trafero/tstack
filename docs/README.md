@@ -9,6 +9,6 @@ Tstack consists of several components:
 * [tregister](tregister.md) - Command line tool to register standard users, using the treg service
 * [tuser](tuser.md) - Command line tool to register users with greater access rights
 * [tconsume](tconsume.md) - Command line MQTT consumer with a number of backends
-
+* [tpublish](tpublish.md) - Command line MQTT message publisher
 
 Also see the [frequently asked questions](faq.md).

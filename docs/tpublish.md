@@ -28,7 +28,7 @@ To publish a message:
 
 ## Example Usage
 
-To publish a message, using the configuration file created by [tregister](tregiser.md):
+To publish a message, using the configuration file created by [tregister](tregister.md):
 
 ```
 tpublish --topic=ABC-123/test --payload=Test

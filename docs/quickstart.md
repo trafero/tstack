@@ -1,91 +1,41 @@
 # Quick Start Guide
 
-A docker image is build that contains the tstack components. Using this is the fastest way to get started.
+A [docker image](https://hub.docker.com/r/trafero/tstack/) contains the tstack components. Using docker-compose with this image is the fastest way to get started.
 
-## Building a local stack
+Note that this stack does not use a secure (encrypted) MQTT connection, so is not suitable for live use, but is a great way to get started locally.
 
-Over the internet, an MQTT broker with authentication should always be set up with encryption. However, for local use, it's more simple to set it up without.
+For a more complete stack with encryption, check out [../docker-compose.yml.dist](../docker-compose.yml.dist) and it's associated [env file](../env.dist).
 
-The following docker containers are required:
+## 1: Docker Compose
 
-### Create a network
+Use the [docker compose file](docker-compose-quickstart.yml) (which must be renamed to docker-compose.yml) to bring up the MQTT broker stack.
 
-The hosts of the various services will need to to each other so we should create a network for them:
+The registration key is set to REGKEY_TO_CHANGE in the docker-compose file. This should be changed.
 
-```
-docker network create --driver bridge tstack
-```
+The compose file brings up a stack of:
 
-### Create an etcd service
+* etcd back end storage for user credentials
+* [tserve](tserve.md) MQTT broker
+* [treg](treg.md) RESTful registration service for new users
 
-An etcd cluster is required as the back end for user storage.
 
-```
-docker run --net tstack --name=etcd0 -d quay.io/coreos/etcd:v3.1.8 \
-      /usr/local/bin/etcd             \
-      -name etcd0                     \
-      -advertise-client-urls http://127.0.0.1:2379 \
-      -listen-client-urls http://0.0.0.0:2379      \
-      -initial-advertise-peer-urls http://127.0.0.1:2380 \
-      -listen-peer-urls http://0.0.0.0:2380              \
-      -initial-cluster-token etcd-cluster-1              \
-      -initial-cluster etcd0=http://127.0.0.1:2380       \
-      -initial-cluster-state new                         \
-      -data-dir=/etcd
-```
+## 2: Create and Use a Superuser
 
-### Start a treg service
+A superuser may be used to consume messages and publish them to a database, or perhaps, route messages from one user to another.
 
-[treg](treg.md) is the registration service, to add users to etcd. Here we create it, listening on port 8000 for new registration requests. "regkey" is set to "REGKEY". This key should is shared with anyone (or anything) that wishes to sign up to use tserve by using the treg service.
+To test, we can start an interactive bash session, using the tstack docker image. This will give us access to all the tstack commands.
 
 ```
-docker run              \
-  --net=tstack          \
-  --name=treg0          \
-  -d                    \
-  -p 8000:8000          \
-  trafero/tstack        \
-  treg                  \
-    --etcdhosts=http://etcd0:2379 \
-    --mqtturl=tcp://tserve0:1883  \
-    --regkey=REGKEY               \
-    --port=8000
-```
-
-### Run the tserve MQTT broker
-
-[tserve](tserve.md) is the MQTT broker.  Here we listen on port 1883 for insecure (not encrypted) MQTT requests.
-
-```
-docker run        \
-  --net=tstack    \
-  --name=tserve0  \
-  -p 1883:1883    \
-  -d              \
-  trafero/tstack  \
-  tserve --etcdhosts=http://etcd0:2379 --addr=0.0.0.0:1883
-```
-
-### Create and Use a Superuser
-
-A superuse may be used to consume messages and publish them to a database, or perhaps, route messages from one user to another.
-
-To test, we can start an interactive bash session, using the tstack docker image. This will give us access to all the tstack commands, and put us on the same docker network as tserve, treg and etcd.
-
-```
-docker run -it   \
-  --net=tstack   \
-  trafero/tstack \
-  bash
+docker-compose run tserve bash
 ```
 
 The [tuser](tuser.md) command can be used to create a new user if it has access to etcd (which is why etcd should not be exposed on a public interface). Here we create a new user with access to all MQTT topics:
 
 ```
 tuser \
-  --etcdhosts=http://etcd0:2379 \
-  --username="CONSUME"          \
-  --password="PASSWORD"         \
+  --etcdhosts=http://etcd:2379  \
+  --username=CONSUMER           \
+  --password=PASSWORD           \
   --rights="#"
 ```
 
@@ -94,7 +44,7 @@ This user can now connect to the [MQTT server](tserve.md) and start consuming me
 ```
 tconsume \
   --ctype=stdout \
-  --mqtturl=tcp://tserve0:1883 \
+  --mqtturl=tcp://tserve:1883  \
   --username=CONSUMER          \
   --password=PASSWORD          \
   --topic='#'
@@ -104,20 +54,16 @@ tconsume \
 
 The [treg](treg.md) service is used to create users with limited access rights; they can only read and write topics that start with their user id.  This should be all that a normal device needs.
 
-To test our platform, we can start another interactive bash session:
+To test our platform, we can start another interactive bash session (while leaving the consumer running, so we can see messages coming through):
 
 ```
-docker run -it   \
-  --net=tstack   \
-  trafero/tstack \
-  bash
+docker-compose run tserve bash
 ```
 
-
-At the docker image prompt, register against the treg service, using the [tregister](tregister.md) command line tool:
+At the docker image prompt, register a new user with the [treg](treg.md) service using the [tregister](tregister.md) command line tool. Change the REGKEY_TO_CHANGE value if you changed it in the docker-compose file.
 
 ```
-tregister --regkey=REGKEY --regservice=http://treg0:8000/register.json
+tregister --regkey=REGKEY_TO_CHANGE --regservice=http://treg:8000/register.json
 ```
 
 This will create a configuration file called /etc/trafero/settings.yml containing  access information for a new tserve user:
@@ -126,10 +72,11 @@ This will create a configuration file called /etc/trafero/settings.yml containin
 cat /etc/trafero/settings.yml
 ```
 
-[tpublish](tpublish.md) can make use of this configuration file. Make a note of the username from the configuration file, and change it in the example below. This will publish a message on the MQTT broker:
+[tpublish](tpublish.md) can use of this configuration file to determine how to connect to the MQTT broker.  Here's an example of using tpublish to write a single message:
 
 ```
-tpublish --topic=ABC-123/temperature --payload=42
+USERNAME=$(grep username /etc/trafero/settings.yml | awk '{{print $2}}')
+tpublish --topic=$USERNAME/temperature --payload=42
 ```
 
-If you still have the consumer running, you will see this message printed out. This proves that you have a working MQTT service.
+If you still have the consumer running you will see this message printed out, showing that you have a fully working MQTT message broker, with authentication.

@@ -1,0 +1,47 @@
+version: '2'
+
+services:
+
+  # Backend storage for treg users
+  etcd:
+    image: quay.io/coreos/etcd:v3.1.8
+    command: >
+      /usr/local/bin/etcd
+      -name etcd0
+      -advertise-client-urls http://127.0.0.1:2379
+      -listen-client-urls http://0.0.0.0:2379
+      -initial-advertise-peer-urls http://127.0.0.1:2380
+      -listen-peer-urls http://0.0.0.0:2380
+      -initial-cluster-token etcd-cluster-1
+      -initial-cluster etcd0=http://127.0.0.1:2380
+      -initial-cluster-state new
+      -data-dir=/etcd
+    volumes:
+      - etcd:/etcd
+
+  # Registration service
+  treg:
+    image: trafero/tstack
+    command: >
+      /go/bin/treg
+      --etcdhosts=http://etcd:2379
+      --mqtturl=tcp://tserve:1883
+      --regkey=REGKEY_TO_CHANGE
+      --port=8000
+    ports:
+      - "8000:8000"
+
+  # tserve MQTT broker
+  tserve:
+    image: trafero/tstack
+    command: >
+      /go/bin/tserve
+      --etcdhosts=http://etcd:2379
+      --addr=0.0.0.0:1883
+    ports:
+      - "1883:1883"
+
+volumes:
+  etcd:
+    driver: local
+

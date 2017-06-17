@@ -72,7 +72,7 @@ This will create a configuration file called /etc/trafero/settings.yml containin
 cat /etc/trafero/settings.yml
 ```
 
-[tpublish](tpublish.md) can use of this configuration file to determine how to connect to the MQTT broker.  Here's an example of using tpublish to write a single message:
+[tpublish](tpublish.md) can use this configuration file to determine how to connect to the MQTT broker.  Here's an example of using tpublish to write a single message:
 
 ```
 USERNAME=$(grep username /etc/trafero/settings.yml | awk '{{print $2}}')

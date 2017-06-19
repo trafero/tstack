@@ -254,7 +254,7 @@ func (c *incomingConn) publish(m *proto.Publish) {
 	if isWildcard(m.TopicName) {
 		log.Print("Ignoring PUBLISH with wildcard topic ", m.TopicName)
 	} else {
-		log.Printf("Message to topic %s", m.TopicName)
+		// log.Printf("Message to topic %s", m.TopicName)
 		c.svr.subs.submit(c, m)
 	}
 
@@ -402,7 +402,7 @@ func (w wild) valid() bool {
 
 func validate(topic string, rights string) bool {
 
-	log.Printf("Validating topic %s againsts rights %s", topic, rights)
+	// log.Printf("Validating topic %s againsts rights %s", topic, rights)
 
 	topiclevels := strings.Split(topic, "/")
 	rightslevels := strings.Split(rights, "/")

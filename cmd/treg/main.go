@@ -51,7 +51,6 @@ type registration_reply struct {
 }
 type registration_request struct {
 	RegistrationKey string
-	DeviceType      string
 }
 
 func register(w http.ResponseWriter, r *http.Request) {
@@ -85,9 +84,6 @@ func register(w http.ResponseWriter, r *http.Request) {
 	checkErr(err)
 
 	err = authService.SetRights(id, id+`/#`)
-	checkErr(err)
-
-	err = authService.SetGroup(id, req_data.DeviceType)
 	checkErr(err)
 
 	// Read TLS certs into struct for output

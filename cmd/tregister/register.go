@@ -12,7 +12,6 @@ import (
 
 type Post struct {
 	RegistrationKey string
-	DeviceType      string
 }
 type Reply struct {
 	Name     string
@@ -21,7 +20,7 @@ type Reply struct {
 	Ca       string
 }
 
-func Register(registrationService string, registrationKey string, deviceType string) (reply Reply, err error) {
+func Register(registrationService string, registrationKey string) (reply Reply, err error) {
 
 	var resp *http.Response
 	reply = Reply{}
@@ -31,7 +30,6 @@ func Register(registrationService string, registrationKey string, deviceType str
 
 	post := Post{
 		RegistrationKey: registrationKey,
-		DeviceType:      deviceType,
 	}
 	post_data, err := json.Marshal(post)
 	if err != nil {

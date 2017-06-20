@@ -5,7 +5,6 @@ package auth
 type User struct {
 	Username string // Device name
 	Password string // Password hash
-	Group    string // Group may be device type (grouping)
 	Rights   string // User rights - may be string reg ex for topics
 }
 
@@ -18,12 +17,6 @@ type Auth interface {
 
 	// AddOrUdpdateUser adds or updates a user's password
 	AddOrUpdateUser(username string, password string) (err error)
-
-	// Set the user group (there is only one group)
-	SetGroup(username string, group string) (err error)
-
-	// Retrieve the group name
-	Group(username string) (group string)
 
 	// Set user rights
 	SetRights(username string, rights string) (err error)

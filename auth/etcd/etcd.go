@@ -128,26 +128,6 @@ func (t *Etcd) AddOrUpdateUser(username string, password string) (err error) {
 	return err
 }
 
-// SetGroup sets user group
-func (t *Etcd) SetGroup(username string, group string) (err error) {
-	log.Printf("Setting up user group for user %s", username)
-	var u auth.User
-	u, err = t.User(username)
-	if err != nil {
-		return err
-	}
-	u.Group = group
-	err = t.setUser(u)
-	return err
-}
-
-// Group returns the user group (there is only one)
-func (t *Etcd) Group(username string) (grou string) {
-	log.Printf("Getting user group for user %s", username)
-	u, _ := t.User(username)
-	return u.Group
-}
-
 // SetRights sets user rights
 func (t *Etcd) SetRights(username string, rights string) (err error) {
 	log.Printf("Setting up user rights for user %s", username)

@@ -36,15 +36,6 @@ func (t *All) AddOrUpdateUser(username string, password string) (err error) {
 	return nil
 }
 
-func (t *All) SetGroup(username string, group string) (err error) {
-	return nil
-}
-
-// Group returns the user group (there is only one)
-func (t *All) Group(username string) (grou string) {
-	return ""
-}
-
 func (t *All) SetRights(username string, rights string) (err error) {
 	return nil
 }

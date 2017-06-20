@@ -31,7 +31,6 @@ func main() {
 		log.Fatal(err)
 	}
 	log.Printf("Device name %s", s.Username)
-	log.Printf("Device type is %s", s.DeviceType)
 	log.Printf("Using broker %s", s.Broker)
 
 	m, err := mqtt.New(s)

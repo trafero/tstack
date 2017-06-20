@@ -38,9 +38,7 @@ Creates users for tstack.
 
 A JSON request of the following required values:
 
-
 * RegistrationKey - Authentication key (see regkey command line option)
-* DeviceType - Short string description of the device, so that common devices can be grouped together
 
 ### Response
 
@@ -57,7 +55,7 @@ Curl request:
 
 ```
 curl -X POST \
-  --data '{"RegistrationKey": "TODO_REGISTRATION_PW", "DeviceType": "test"}' \
+  --data '{"RegistrationKey": "TODO_REGISTRATION_PW"}' \
    http://HOSTNAME:8000/register.json
 ```
 

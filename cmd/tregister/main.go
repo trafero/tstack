@@ -14,13 +14,12 @@ const (
 	cacertfile        = "/etc/trafero/ca.crt"
 )
 
-var regservice, regkey, devtype string
+var regservice, regkey string
 var verifytls bool
 
 func init() {
 	flag.StringVar(&regservice, "regservice", "", "Registration service (e.g. http://localhost:8000/register.json)")
 	flag.StringVar(&regkey, "regkey", "", "Registration key")
-	flag.StringVar(&devtype, "devtype", "unknown", "Device type (e.g. testdevice)")
 	flag.BoolVar(&verifytls, "verifytls", true, "Verify MQTT server TLS certificate name")
 	flag.Parse()
 }
@@ -51,7 +50,6 @@ func main() {
 	}
 
 	log.Printf("Device name %s", s.Username)
-	log.Printf("Device type is %s", s.DeviceType)
 	log.Printf("Using broker %s", s.Broker)
 
 }
@@ -59,12 +57,11 @@ func main() {
 func registerDevice() (s *settings.Settings, err error) {
 
 	s = &settings.Settings{
-		DeviceType: devtype,
 		VerifyTls:  verifytls,
 		CaCertFile: cacertfile,
 	}
 
-	reply, err := Register(regservice, regkey, devtype)
+	reply, err := Register(regservice, regkey)
 	if err != nil {
 		return s, err
 	}

@@ -17,7 +17,6 @@ type Settings struct {
 	Password   string
 	Broker     string
 	CaCertFile string
-	DeviceType string
 	VerifyTls  bool
 }
 

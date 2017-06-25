@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"strconv"
 )
 
 const (
@@ -17,6 +18,7 @@ type Settings struct {
 	Password   string
 	Broker     string
 	CaCertFile string
+	clientId   string
 	VerifyTls  bool
 }
 
@@ -44,4 +46,11 @@ func Write(s *Settings) (err error) {
 	}
 	err = ioutil.WriteFile(settingsFile, d, 0644)
 	return err
+}
+
+func (s *Settings) ClientId() string {
+	if s.clientId == "" {
+		s.clientId = s.Username + "-" + strconv.Itoa(os.Getpid())
+	}
+	return s.clientId
 }

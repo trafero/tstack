@@ -34,7 +34,7 @@ func New(s *settings.Settings) (m *MQTT, err error) {
 	}
 	tlsconfig.InsecureSkipVerify = !s.VerifyTls
 	opts := paho.NewClientOptions()
-	opts.SetClientID(s.Username)
+	opts.SetClientID(s.ClientId())
 	opts.SetTLSConfig(tlsconfig)
 	opts.AddBroker(s.Broker)
 	opts.SetDefaultPublishHandler(m.controlMessageHandler)
@@ -56,7 +56,7 @@ func NewInsecure(s *settings.Settings) (m *MQTT, err error) {
 	m = &MQTT{}
 
 	opts := paho.NewClientOptions()
-	opts.SetClientID(s.Username)
+	opts.SetClientID(s.ClientId())
 	opts.AddBroker(s.Broker)
 	opts.SetDefaultPublishHandler(m.controlMessageHandler)
 	opts.SetUsername(s.Username)

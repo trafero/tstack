@@ -9,9 +9,9 @@ import (
 type All struct {
 }
 
-const ALL_RIGHTS = ".*"
+const ALL_RIGHTS = "#"
 
-func New(endpoints []string) (a *All, err error) {
+func New() (a *All, err error) {
 	a = &All{}
 	return a, nil
 }

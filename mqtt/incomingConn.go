@@ -180,7 +180,7 @@ func (c *incomingConn) connect(m *proto.Connect) {
 
 	if (m.ProtocolName != "MQIsdp" || m.ProtocolVersion != 3) &&
 		(m.ProtocolName != "MQTT" || m.ProtocolVersion != 4) {
-		log.Print("reader: reject connection from ", m.ProtocolName, " version ", m.ProtocolVersion)
+		log.Print("Reject connection from ", m.ProtocolName, " version ", m.ProtocolVersion)
 		rc = proto.RetCodeUnacceptableProtocolVersion
 	}
 
@@ -228,7 +228,7 @@ func (c *incomingConn) connect(m *proto.Connect) {
 	if m.CleanSession {
 		clean = 1
 	}
-	log.Printf("New client connected from %v as %v (c%v, k%v).", c.conn.RemoteAddr(), c.clientid, clean, m.KeepAliveTimer)
+	log.Printf("Client connected from %v as %v (c%v, k%v).", c.conn.RemoteAddr(), c.clientid, clean, m.KeepAliveTimer)
 
 }
 

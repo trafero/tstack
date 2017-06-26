@@ -49,8 +49,10 @@ func Write(s *Settings) (err error) {
 }
 
 func (s *Settings) ClientId() string {
+	hostname, _ := os.Hostname()
+
 	if s.clientId == "" {
-		s.clientId = s.Username + "-" + strconv.Itoa(os.Getpid())
+		s.clientId = s.Username + "-" + hostname + "-" + strconv.Itoa(os.Getpid())
 	}
 	return s.clientId
 }

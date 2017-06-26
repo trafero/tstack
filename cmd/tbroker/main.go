@@ -23,8 +23,6 @@ func main() {
 		c, err := l.Accept()
 		checkErr(err)
 		client := broker.NewClient(a, b, c)
-		b.AddClient(client)
-
 		go client.HandleConnection()
 	}
 }

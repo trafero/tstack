@@ -24,9 +24,13 @@ type client struct {
 	decoder          *packet.Decoder
 	subscriptions    []packet.Subscription
 	mutex            *sync.Mutex
+	packetIDCounter  uint16
+
+	// QOS 2 messages to be received (and passeed to broker)
+	inboundInTransit map[uint16]packet.Message
 
 	// QOS 2 messages to be sent
-	messagesInTransit map[uint16]packet.Message
+	outboundInTransit map[uint16]packet.Message
 }
 
 func NewClient(a auth.Auth, b *broker, c net.Conn) *client {
@@ -36,7 +40,9 @@ func NewClient(a auth.Auth, b *broker, c net.Conn) *client {
 		conn:              c,
 		processedConnect:  false,
 		mutex:             &sync.Mutex{},
-		messagesInTransit: make(map[uint16]packet.Message),
+		inboundInTransit:  make(map[uint16]packet.Message),
+		outboundInTransit: make(map[uint16]packet.Message),
+		packetIDCounter:   0,
 	}
 }
 
@@ -71,14 +77,12 @@ func (c *client) HandleConnection() {
 		case *packet.UnsubscribePacket:
 			log.Println("UnsubscribePacket not implemented")
 			c.conn.Close()
-			log.Println("PubackPacket not implemented")
-			c.conn.Close()
+		case *packet.PubackPacket:
+			go c.processPuback(pkt)
 		case *packet.PubcompPacket:
-			log.Println("PubcompPacket not implemented")
-			c.conn.Close()
+			go c.processComp(pkt)
 		case *packet.PubrecPacket:
-			log.Println("PubrecPacket not implemented")
-			c.conn.Close()
+			go c.processPubrec(pkt)
 		case *packet.PubrelPacket:
 			go c.processPubrel(pkt)
 		case *packet.PingreqPacket:
@@ -98,12 +102,12 @@ func (c *client) HandleConnection() {
 
 func (c *client) processPubrel(pkt *packet.PubrelPacket) {
 	log.Println("Got Pubrel")
-	msg := c.messagesInTransit[pkt.PacketID]
+	msg := c.inboundInTransit[pkt.PacketID]
 
 	if unsafe.Sizeof(msg) != 0 {
 		// msg is not an empty stuct
 		c.broker.receive(&msg)
-		delete(c.messagesInTransit, pkt.PacketID)
+		delete(c.inboundInTransit, pkt.PacketID)
 		p := packet.NewPubcompPacket()
 		p.PacketID = pkt.PacketID
 		c.encoder.Write(p)
@@ -126,6 +130,7 @@ func (c *client) processConnect(pkt *packet.ConnectPacket) {
 		// No acknowledgement, just disconnect
 		c.conn.Close()
 	}
+	c.processedConnect = true
 	if pkt.Version != 4 {
 		c.writeConnack(packet.ErrInvalidProtocolVersion)
 		log.Println("Unsupported MQTT version")
@@ -144,8 +149,10 @@ func (c *client) processConnect(pkt *packet.ConnectPacket) {
 		c.conn.Close()
 		return
 	}
-	// TODO check clientid is not already in use
+
+	// TODO check Clinet ID is not already in use
 	c.clientid = pkt.ClientID
+
 	c.username = pkt.Username
 	c.rights = c.auth.Rights(c.username)
 
@@ -160,6 +167,8 @@ func (c *client) processConnect(pkt *packet.ConnectPacket) {
 	if pkt.CleanSession {
 		// TODO clean session
 	}
+
+	c.broker.AddClient(c)
 	c.writeConnack(packet.ConnectionAccepted)
 }
 func (c *client) writeConnack(code packet.ConnackCode) {
@@ -204,12 +213,13 @@ func (c *client) processPublish(pkt *packet.PublishPacket) {
 		case packet.QOSExactlyOnce:
 			// QOS 2
 			c.mutex.Lock()
-			c.messagesInTransit[pkt.PacketID] = pkt.Message
+			c.inboundInTransit[pkt.PacketID] = pkt.Message
 			c.mutex.Unlock()
 			p := packet.NewPubrecPacket()
 			p.PacketID = pkt.PacketID
 			c.encoder.Write(p)
 			c.encoder.Flush()
+			// Send it back to the main switch for a Pubrel
 
 		default:
 			// Unknown QOS
@@ -250,7 +260,6 @@ func (c *client) processSubscribe(pkt *packet.SubscribePacket) {
 				c.subscriptions = append(c.subscriptions, s)
 				c.mutex.Unlock()
 			}
-			// TODO are we returning correct QOS?
 			suback.ReturnCodes = append(suback.ReturnCodes, s.QOS)
 		}
 	}
@@ -265,13 +274,63 @@ func (c *client) authorized(topic string) bool {
 func (c *client) Send(msg *packet.Message, qos byte) {
 	log.Println("Sending message")
 	p := packet.NewPublishPacket()
-	p.Message = *msg
+
+	// Re-pack the messgae to use the reciever's QoS
+	// and set retain to false
+	m := &packet.Message{
+		Topic:   msg.Topic,
+		Payload: msg.Payload,
+		QOS:     qos,
+		Retain:  false,
+	}
+
+	p.Message = *m
 	// TODO set to true if this is a retry
 	p.Dup = false
-	// TODO - packet id set for QOS 1 and QOS2
-	// p.PacketId = ???
+	// Sec. 2.3.1
+	if qos > 0 {
+		p.PacketID = c.newPacketID()
+	}
 	c.encoder.Write(p)
 	c.encoder.Flush()
+	c.outboundInTransit[p.PacketID] = p.Message
+}
+
+// TODO build in resend if do not get a puback
+
+// For QOS 1 (sec. 3.4)
+func (c *client) processPuback(pkt *packet.PubackPacket) {
+	log.Printf("Got Publish Ack for packet id %d", pkt.PacketID)
+	delete(c.outboundInTransit, pkt.PacketID)
+}
+
+// For QOS 2
+func (c *client) processPubrec(pkt *packet.PubrecPacket) {
+	log.Printf("Got Publish Received for packet id %d", pkt.PacketID)
+
+	// Only send resonse if we have the message
+	/*
+		if _,ok := c.outboundInTransit[pkt.PacketID]; ! ok {
+			log.Println("Pubrec for a message that I do not have")
+			c.conn.Close()
+			return
+		}
+	*/
+	p := packet.NewPubrelPacket()
+	p.PacketID = pkt.PacketID
+	c.encoder.Write(p)
+	c.encoder.Flush()
+}
+
+// For QOS 2
+func (c *client) processComp(pkt *packet.PubcompPacket) {
+	log.Printf("Got Pubcomp for packet id %d", pkt.PacketID)
+	delete(c.outboundInTransit, pkt.PacketID)
+}
+
+func (c *client) newPacketID() uint16 {
+	c.packetIDCounter++
+	return c.packetIDCounter
 }
 
 func checkErr(err error) {

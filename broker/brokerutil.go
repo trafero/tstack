@@ -5,12 +5,13 @@ import (
 )
 
 func matches(matcher string, topic string) bool {
-	topiclevels := strings.Split(topic, "/")
+
 	matcherlevels := strings.Split(matcher, "/")
+	topiclevels := strings.Split(topic, "/")
 
 	for i := 0; i < len(topiclevels); i++ {
 		// Rights levels are not deep enough
-		if len(matcherlevels) < i {
+		if len(matcherlevels) <= i {
 			return false
 		}
 		// Wildcard here on in, so match everything

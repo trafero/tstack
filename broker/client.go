@@ -7,31 +7,31 @@ import (
 	"log"
 	"net"
 	"sync"
-	"unsafe"
 	"time"
+	"unsafe"
 )
 
 type client struct {
-	broker           *broker
-	conn             net.Conn
-	auth             auth.Auth
-	cleanSession     bool
-	processedConnect bool
-	clientid         string
-	username         string
-	rights           string
-	will             *packet.Message
-	keepalive        uint16
-	encoder          *packet.Encoder
-	decoder          *packet.Decoder
-	subscriptions    map[string]packet.Subscription // Mapped by topic
-	mutex            *sync.Mutex
-	connectionMutex  *sync.Mutex
-	packetIDCounter  uint16
-	inboundInTransit map[uint16]packet.Message // QOS 2 messages to be received (and passeed to broker)
-	outboundInTransit map[uint16]packet.Message // QOS 2 messages to be sent
-	internalClientCounter int // For internal client ids (MQTT-3.1.3-6)
-	
+	broker                *broker
+	conn                  net.Conn
+	auth                  auth.Auth
+	cleanSession          bool
+	processedConnect      bool
+	clientid              string
+	username              string
+	rights                string
+	will                  *packet.Message
+	keepalive             uint16
+	encoder               *packet.Encoder
+	decoder               *packet.Decoder
+	subscriptions         map[string]packet.Subscription // Mapped by topic
+	mutex                 *sync.Mutex
+	connectionMutex       *sync.Mutex
+	packetIDCounter       uint16
+	inboundInTransit      map[uint16]packet.Message // QOS 2 messages to be received (and passeed to broker)
+	outboundInTransit     map[uint16]packet.Message // QOS 2 messages to be sent
+	internalClientCounter int                       // For internal client ids (MQTT-3.1.3-6)
+
 }
 
 func NewClient(a auth.Auth, b *broker, c net.Conn) *client {
@@ -64,10 +64,10 @@ func (c *client) HandleConnection() {
 			c.conn.Close()
 			break
 		}
-		
+
 		// Connection timeout
 		c.setReadDeadline()
-		
+
 		switch pkt := pkt.(type) {
 		default:
 			log.Println("Unknown MQTT packet received")
@@ -79,8 +79,7 @@ func (c *client) HandleConnection() {
 		case *packet.SubscribePacket:
 			go c.processSubscribe(pkt)
 		case *packet.UnsubscribePacket:
-			log.Println("UnsubscribePacket not implemented")
-			c.conn.Close()
+			go c.processUnsubscribe(pkt)
 		case *packet.PubackPacket:
 			go c.processPuback(pkt)
 		case *packet.PubcompPacket:
@@ -102,6 +101,9 @@ func (c *client) HandleConnection() {
 	}
 }
 
+/*
+ * PUBREL – Publish release (QoS 2 publish received, part 2)
+ */
 func (c *client) processPubrel(pkt *packet.PubrelPacket) {
 	log.Println("Got Pubrel")
 	msg := c.inboundInTransit[pkt.PacketID]
@@ -117,14 +119,18 @@ func (c *client) processPubrel(pkt *packet.PubrelPacket) {
 
 }
 
+/*
+ * PINGREQ – PING request (3.1.2)
+ */
 func (c *client) processPing(pkt *packet.PingreqPacket) {
 	log.Println("Got ping request")
 	p := packet.NewPingrespPacket()
 	c.sendPacket(p)
 }
+
 /*
  * CONNECT – Client requests a connection to a Server (3.1)
-*/
+ */
 func (c *client) processConnect(pkt *packet.ConnectPacket) {
 	log.Printf("Got connect packet %v", pkt)
 	if c.processedConnect {
@@ -156,10 +162,10 @@ func (c *client) processConnect(pkt *packet.ConnectPacket) {
 		// Must be a clean session, which we know already from above
 		pkt.ClientID = c.newInternalClientID()
 	}
-	
+
 	// TODO check Clinet ID is not already in use
 	c.clientid = pkt.ClientID
-	
+
 	c.cleanSession = pkt.CleanSession
 	c.username = pkt.Username
 	c.rights = c.auth.Rights(c.username)
@@ -170,41 +176,43 @@ func (c *client) processConnect(pkt *packet.ConnectPacket) {
 		c.will = pkt.Will // May be nil but that is ok
 	}
 
-	// TODO make use of keepalive
 	log.Printf("Got a keepalive of %d", pkt.KeepAlive)
 	c.keepalive = pkt.KeepAlive
 	c.setReadDeadline()
-	
+
 	c.broker.AddClient(c)
 	c.writeConnack(packet.ConnectionAccepted)
 }
+
 /*
 * CONNACK – Acknowledge connection request (3.2)
-*/
+ */
 func (c *client) writeConnack(code packet.ConnackCode) {
 	connack := packet.NewConnackPacket()
 	connack.SessionPresent = false
 	connack.ReturnCode = code
 	c.sendPacket(connack)
-	
+
 	// Now we are connected, check if there's any unfinished business
 	// Unfinished packets
 	for packetID, msg := range c.outboundInTransit {
 		c.resend(packetID, &msg)
 	}
 }
+
 /*
  * DISCONNECT – Disconnect notification(3.14)
-*/
+ */
 func (c *client) processDisconnect(pkt *packet.DisconnectPacket) {
 	//discard Will
 	c.will = nil
 	// Close connection if the client has not already done so
 	c.conn.Close()
 }
+
 /*
  * PUBLISH – Publish message (3.3)
-*/
+ */
 func (c *client) processPublish(pkt *packet.PublishPacket) {
 	log.Printf("Got publish packet %v", pkt)
 	if !matches(c.rights, pkt.Message.Topic) {
@@ -245,9 +253,10 @@ func (c *client) processPublish(pkt *packet.PublishPacket) {
 		}
 	}
 }
+
 /*
- * PUBLISH – Publish message (3.9)
-*/
+ * SUBSCRIBE - Subscribe to topics (3.8)
+ */
 func (c *client) processSubscribe(pkt *packet.SubscribePacket) {
 
 	log.Printf("Got subscribe packet %v", pkt)
@@ -256,10 +265,9 @@ func (c *client) processSubscribe(pkt *packet.SubscribePacket) {
 	suback.PacketID = pkt.PacketID
 
 	for _, s := range pkt.Subscriptions {
-		if ! matches(c.rights, s.Topic) {
+		if !matches(c.rights, s.Topic) {
 			log.Printf("Not authorized to subscribe to topic %s", s.Topic)
 			suback.ReturnCodes = append(suback.ReturnCodes, 0x80) // sec 3.9.3 of spec
-
 		} else {
 			c.mutex.Lock()
 			c.subscriptions[s.Topic] = s
@@ -267,16 +275,32 @@ func (c *client) processSubscribe(pkt *packet.SubscribePacket) {
 			suback.ReturnCodes = append(suback.ReturnCodes, s.QOS)
 			// Send any retained messages for this subscription
 			c.sendRetained(s.Topic, s.QOS)
-			
 		}
 	}
 	c.sendPacket(suback) // SUBACK 3.9
-	
+}
+
+/*
+ * UNSUBSCRIBE – Unsubscribe from topics (3.10)
+ */
+func (c *client) processUnsubscribe(pkt *packet.UnsubscribePacket) {
+	log.Println("Got unsubscribe packet")
+	c.mutex.Lock()
+	for _, t := range pkt.Topics {
+		log.Printf("Unsubscribing from %s", t)
+		delete(c.subscriptions, t)
+	}
+	log.Printf("Subscriptions: %s:", c.subscriptions)
+
+	c.mutex.Unlock()
+	p := packet.NewUnsubackPacket()
+	p.PacketID = pkt.PacketID
+	c.sendPacket(p) // UNSUBACK 3.11
 }
 
 /*
  *  PUBACK – Publish acknowledgement (3.4)
-*/
+ */
 func (c *client) processPuback(pkt *packet.PubackPacket) {
 	log.Printf("Got Publish Ack for packet id %d", pkt.PacketID)
 	delete(c.outboundInTransit, pkt.PacketID)
@@ -284,12 +308,12 @@ func (c *client) processPuback(pkt *packet.PubackPacket) {
 
 /*
  * PUBREC – Publish received (QoS 2 publish received, part 1) (3.5)
-*/
+ */
 func (c *client) processPubrec(pkt *packet.PubrecPacket) {
 	log.Printf("Got Publish Received for packet id %d", pkt.PacketID)
 
 	// Only send resonse if we have the message
-	if _,ok := c.outboundInTransit[pkt.PacketID]; ! ok {
+	if _, ok := c.outboundInTransit[pkt.PacketID]; !ok {
 		log.Println("Pubrec for a message that I do not have")
 		c.conn.Close()
 		return
@@ -298,9 +322,10 @@ func (c *client) processPubrec(pkt *packet.PubrecPacket) {
 	p.PacketID = pkt.PacketID
 	c.sendPacket(p)
 }
+
 /*
  * PUBCOMP – Publish complete (QoS 2 publish received, part 3) (3.7)
-*/
+ */
 func (c *client) processComp(pkt *packet.PubcompPacket) {
 	log.Printf("Got Pubcomp for packet id %d", pkt.PacketID)
 	delete(c.outboundInTransit, pkt.PacketID)
@@ -328,7 +353,7 @@ func (c *client) send(msg *packet.Message, qos byte, retain bool) {
 		c.outboundInTransit[p.PacketID] = p.Message
 	}
 
-	c.sendPacket(p)	
+	c.sendPacket(p)
 }
 
 func (c *client) resend(packetID uint16, msg *packet.Message) {
@@ -354,9 +379,8 @@ func (c *client) sendRetained(topic string, qos uint8) {
 }
 
 func (c *client) setReadDeadline() {
-	log.Printf("Using keepalive %d", c.keepalive)
 	if c.keepalive > 0 {
-		if err := c.conn.SetReadDeadline( time.Now().Add(time.Duration(c.keepalive) * time.Second) ) ; err != nil {
+		if err := c.conn.SetReadDeadline(time.Now().Add(time.Duration(c.keepalive) * time.Second)); err != nil {
 			log.Printf("Error setting read deadline on network connection", err)
 		}
 	}
@@ -367,14 +391,13 @@ func (c *client) sendPacket(p packet.Packet) {
 	c.encoder.Flush()
 	c.connectionMutex.Unlock()
 }
-func (c *client) newInternalClientID() (string) {
-	c.internalClientCounter ++
+func (c *client) newInternalClientID() string {
+	c.internalClientCounter++
 	return "internalClient" + string(c.internalClientCounter)
-	
+
 }
 
 func (c *client) newPacketID() uint16 {
 	c.packetIDCounter++
 	return c.packetIDCounter
 }
-

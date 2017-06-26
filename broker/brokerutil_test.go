@@ -46,4 +46,29 @@ func TestMatcher(t *testing.T) {
 	if matches("", "one/two/three") {
 		t.Error("Expected not matching topic and rights to be invalid")
 	}
+	if matches("TopicA/B", "TopicA") {
+		t.Error("Expected to match whole topic")
+	}
+
+	// Starting with $
+	// The Server MUST NOT match Topic Filters starting with a wildcard
+	// character (# or +) with Topic Names beginning with a $ character
+	// [MQTT-4.7.2-1].
+	if matches("#", "$one/two/three") {
+		t.Error("Wildcard should not match on $ start")
+	}
+	if matches("#", "$/two/three") {
+		t.Error("Wildcard should not match on $ start")
+	}
+	if matches("+/two/three", "$one/two/three") {
+		t.Error("Wildcard should not match on $ start")
+	}
+
+	if !matches("one/#", "one/$two/three") {
+		t.Error("Wildcard should match on $ if not at the start")
+	}
+	if !matches("one/+/three", "one/$two/three") {
+		t.Error("Wildcard should match on $ if not at the start")
+	}
+
 }

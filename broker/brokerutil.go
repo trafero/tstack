@@ -1,20 +1,16 @@
 package broker
 
 import (
-	"log"
 	"strings"
 )
 
 func matches(matcher string, topic string) bool {
-
 	matcherlevels := strings.Split(matcher, "/")
 	topiclevels := strings.Split(topic, "/")
-
 	if len(matcherlevels) > len(topiclevels) {
 		// Case of matcher has more levels than topic
 		return false
 	}
-
 	for i := 0; i < len(topiclevels); i++ {
 		// The Server MUST NOT match Topic Filters starting with a wildcard
 		// character (# or +) with Topic Names beginning with a $ character
@@ -24,7 +20,6 @@ func matches(matcher string, topic string) bool {
 				return false
 			}
 		}
-
 		// Rights levels are not deep enough
 		if len(matcherlevels) <= i {
 			return false
@@ -38,6 +33,5 @@ func matches(matcher string, topic string) bool {
 			return false
 		}
 	}
-
 	return true
 }

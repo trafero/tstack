@@ -8,6 +8,7 @@ import (
 	"net"
 	"sync"
 	"unsafe"
+	"time"
 )
 
 type client struct {
@@ -23,15 +24,13 @@ type client struct {
 	keepalive        uint16
 	encoder          *packet.Encoder
 	decoder          *packet.Decoder
-	subscriptions    []packet.Subscription
+	subscriptions    map[string]packet.Subscription // Mapped by topic
 	mutex            *sync.Mutex
+	connectionMutex  *sync.Mutex
 	packetIDCounter  uint16
-
-	// QOS 2 messages to be received (and passeed to broker)
-	inboundInTransit map[uint16]packet.Message
-
-	// QOS 2 messages to be sent
-	outboundInTransit map[uint16]packet.Message
+	inboundInTransit map[uint16]packet.Message // QOS 2 messages to be received (and passeed to broker)
+	outboundInTransit map[uint16]packet.Message // QOS 2 messages to be sent
+	
 }
 
 func NewClient(a auth.Auth, b *broker, c net.Conn) *client {
@@ -41,20 +40,20 @@ func NewClient(a auth.Auth, b *broker, c net.Conn) *client {
 		conn:              c,
 		processedConnect:  false,
 		mutex:             &sync.Mutex{},
+		connectionMutex:   &sync.Mutex{},
 		inboundInTransit:  make(map[uint16]packet.Message),
 		outboundInTransit: make(map[uint16]packet.Message),
+		subscriptions:     make(map[string]packet.Subscription),
 		packetIDCounter:   0,
+		keepalive:         0, // in seconds
 	}
 }
 
 func (c *client) HandleConnection() {
-
 	var err error
 	var pkt packet.Packet
-
 	c.decoder = packet.NewDecoder(c.conn)
 	c.encoder = packet.NewEncoder(c.conn)
-
 	for {
 		pkt, err = c.decoder.Read()
 		if err != nil {
@@ -64,7 +63,10 @@ func (c *client) HandleConnection() {
 			c.conn.Close()
 			break
 		}
-
+		
+		// Connection timeout
+		c.setReadDeadline()
+		
 		switch pkt := pkt.(type) {
 		default:
 			log.Println("Unknown MQTT packet received")
@@ -92,13 +94,11 @@ func (c *client) HandleConnection() {
 			c.processDisconnect(pkt)
 		}
 	}
-
 	// Send out with last will. Last will set to nill if never set or
 	// client send disconnect
 	if c.will != nil {
-		c.broker.receive(c.will)
+		c.broker.deliver(c.will)
 	}
-
 }
 
 func (c *client) processPubrel(pkt *packet.PubrelPacket) {
@@ -107,12 +107,11 @@ func (c *client) processPubrel(pkt *packet.PubrelPacket) {
 
 	if unsafe.Sizeof(msg) != 0 {
 		// msg is not an empty stuct
-		c.broker.receive(&msg)
+		c.broker.deliver(&msg)
 		delete(c.inboundInTransit, pkt.PacketID)
 		p := packet.NewPubcompPacket()
 		p.PacketID = pkt.PacketID
-		c.encoder.Write(p)
-		c.encoder.Flush()
+		c.sendPacket(p)
 	}
 
 }
@@ -120,10 +119,11 @@ func (c *client) processPubrel(pkt *packet.PubrelPacket) {
 func (c *client) processPing(pkt *packet.PingreqPacket) {
 	log.Println("Got ping request")
 	p := packet.NewPingrespPacket()
-	c.encoder.Write(p)
-	c.encoder.Flush()
+	c.sendPacket(p)
 }
-
+/*
+ * CONNECT – Client requests a connection to a Server (3.1)
+*/
 func (c *client) processConnect(pkt *packet.ConnectPacket) {
 	log.Printf("Got connect packet %v", pkt)
 	if c.processedConnect {
@@ -157,44 +157,50 @@ func (c *client) processConnect(pkt *packet.ConnectPacket) {
 	c.username = pkt.Username
 	c.rights = c.auth.Rights(c.username)
 
-	if pkt.Will != nil && !c.authorized(pkt.Will.Topic) {
+	if pkt.Will != nil && !matches(c.rights, pkt.Will.Topic) {
 		log.Println("Client not authorized to write this will")
 	} else {
 		c.will = pkt.Will // May be nil but that is ok
 	}
 
 	// TODO make use of keepalive
+	log.Printf("Got a keepalive of %d", pkt.KeepAlive)
 	c.keepalive = pkt.KeepAlive
-	if pkt.CleanSession {
-		// TODO clean session
-	}
-
+	c.setReadDeadline()
+	
 	c.broker.AddClient(c)
 	c.writeConnack(packet.ConnectionAccepted)
 }
+/*
+* CONNACK – Acknowledge connection request (3.2)
+*/
 func (c *client) writeConnack(code packet.ConnackCode) {
 	connack := packet.NewConnackPacket()
 	connack.SessionPresent = false
 	connack.ReturnCode = code
-	c.encoder.Write(connack)
-	c.encoder.Flush()
+	c.sendPacket(connack)
 	
 	// Now we are connected, check if there's any unfinished business
+	// Unfinished packets
 	for packetID, msg := range c.outboundInTransit {
 		c.resend(packetID, &msg)
 	}
 }
-
+/*
+ * DISCONNECT – Disconnect notification(3.14)
+*/
 func (c *client) processDisconnect(pkt *packet.DisconnectPacket) {
 	//discard Will
 	c.will = nil
 	// Close connection if the client has not already done so
 	c.conn.Close()
 }
-
+/*
+ * PUBLISH – Publish message (3.3)
+*/
 func (c *client) processPublish(pkt *packet.PublishPacket) {
 	log.Printf("Got publish packet %v", pkt)
-	if !c.authorized(pkt.Message.Topic) {
+	if !matches(c.rights, pkt.Message.Topic) {
 		// TODO send code back?
 		log.Printf("Not authorized to publish to topic %s", pkt.Message.Topic)
 		// Give them a hint
@@ -206,15 +212,14 @@ func (c *client) processPublish(pkt *packet.PublishPacket) {
 
 		case packet.QOSAtMostOnce:
 			// QOS 0
-			c.broker.receive(&pkt.Message)
+			c.broker.deliver(&pkt.Message)
 
 		case packet.QOSAtLeastOnce:
 			// QOS 1
-			c.broker.receive(&pkt.Message)
+			c.broker.deliver(&pkt.Message)
 			p := packet.NewPubackPacket()
 			p.PacketID = pkt.PacketID
-			c.encoder.Write(p)
-			c.encoder.Flush()
+			c.sendPacket(p)
 
 		case packet.QOSExactlyOnce:
 			// QOS 2
@@ -223,19 +228,19 @@ func (c *client) processPublish(pkt *packet.PublishPacket) {
 			c.mutex.Unlock()
 			p := packet.NewPubrecPacket()
 			p.PacketID = pkt.PacketID
-			c.encoder.Write(p)
-			c.encoder.Flush()
+			c.sendPacket(p)
 			// Send it back to the main switch for a Pubrel
 
 		default:
 			// Unknown QOS
 			log.Printf("Unknown QOS level")
 			c.conn.Close()
-
 		}
 	}
 }
-
+/*
+ * PUBLISH – Publish message (3.9)
+*/
 func (c *client) processSubscribe(pkt *packet.SubscribePacket) {
 
 	log.Printf("Got subscribe packet %v", pkt)
@@ -244,40 +249,57 @@ func (c *client) processSubscribe(pkt *packet.SubscribePacket) {
 	suback.PacketID = pkt.PacketID
 
 	for _, s := range pkt.Subscriptions {
-		if !c.authorized(s.Topic) {
+		if ! matches(c.rights, s.Topic) {
 			log.Printf("Not authorized to subscribe to topic %s", s.Topic)
 			suback.ReturnCodes = append(suback.ReturnCodes, 0x80) // sec 3.9.3 of spec
 
 		} else {
-			// Look for existing subscription and replace if we find it,
-			found := false
-			for i, existingSubs := range c.subscriptions {
-				if s.Topic == existingSubs.Topic {
-					found = true
-					c.mutex.Lock()
-					c.subscriptions[i] = s
-					c.mutex.Unlock()
-					break // can only be one match at most
-				}
-			}
-			// Otherwise add the new subscription
-			if found == false {
-				c.mutex.Lock()
-				c.subscriptions = append(c.subscriptions, s)
-				c.mutex.Unlock()
-			}
+			c.mutex.Lock()
+			c.subscriptions[s.Topic] = s
+			c.mutex.Unlock()
 			suback.ReturnCodes = append(suback.ReturnCodes, s.QOS)
+			// Send any retained messages for this subscription
+			c.sendRetained(s.Topic, s.QOS)
+			
 		}
 	}
-	c.encoder.Write(suback)
-	c.encoder.Flush()
+	c.sendPacket(suback) // SUBACK 3.9
+	
 }
 
-func (c *client) authorized(topic string) bool {
-	return matches(c.rights, topic)
+/*
+ *  PUBACK – Publish acknowledgement (3.4)
+*/
+func (c *client) processPuback(pkt *packet.PubackPacket) {
+	log.Printf("Got Publish Ack for packet id %d", pkt.PacketID)
+	delete(c.outboundInTransit, pkt.PacketID)
 }
 
-func (c *client) send(msg *packet.Message, qos byte) {
+/*
+ * PUBREC – Publish received (QoS 2 publish received, part 1) (3.5)
+*/
+func (c *client) processPubrec(pkt *packet.PubrecPacket) {
+	log.Printf("Got Publish Received for packet id %d", pkt.PacketID)
+
+	// Only send resonse if we have the message
+	if _,ok := c.outboundInTransit[pkt.PacketID]; ! ok {
+		log.Println("Pubrec for a message that I do not have")
+		c.conn.Close()
+		return
+	}
+	p := packet.NewPubrelPacket()
+	p.PacketID = pkt.PacketID
+	c.sendPacket(p)
+}
+/*
+ * PUBCOMP – Publish complete (QoS 2 publish received, part 3) (3.7)
+*/
+func (c *client) processComp(pkt *packet.PubcompPacket) {
+	log.Printf("Got Pubcomp for packet id %d", pkt.PacketID)
+	delete(c.outboundInTransit, pkt.PacketID)
+}
+
+func (c *client) send(msg *packet.Message, qos byte, retain bool) {
 	log.Println("Sending message")
 	p := packet.NewPublishPacket()
 
@@ -287,7 +309,7 @@ func (c *client) send(msg *packet.Message, qos byte) {
 		Topic:   msg.Topic,
 		Payload: msg.Payload,
 		QOS:     qos,
-		Retain:  false,
+		Retain:  retain,
 	}
 
 	p.Message = *m
@@ -298,48 +320,45 @@ func (c *client) send(msg *packet.Message, qos byte) {
 		p.PacketID = c.newPacketID()
 		c.outboundInTransit[p.PacketID] = p.Message
 	}
-	c.encoder.Write(p)
-	c.encoder.Flush()
+
+	c.sendPacket(p)	
 }
+
 func (c *client) resend(packetID uint16, msg *packet.Message) {
 	log.Printf("Re-sending message %d", packetID)
 	p := packet.NewPublishPacket()
 	p.Message = *msg
 	p.Dup = true
 	p.PacketID = packetID
-	c.encoder.Write(p)
-	c.encoder.Flush()
+	c.sendPacket(p)
 }
 
-// TODO build in resend if do not get a puback
+func (c *client) sendRetained(topic string, qos uint8) {
 
-// For QOS 1 (sec. 3.4)
-func (c *client) processPuback(pkt *packet.PubackPacket) {
-	log.Printf("Got Publish Ack for packet id %d", pkt.PacketID)
-	delete(c.outboundInTransit, pkt.PacketID)
-}
-
-// For QOS 2
-func (c *client) processPubrec(pkt *packet.PubrecPacket) {
-	log.Printf("Got Publish Received for packet id %d", pkt.PacketID)
-
-	// Only send resonse if we have the message
-	if _,ok := c.outboundInTransit[pkt.PacketID]; ! ok {
-		log.Println("Pubrec for a message that I do not have")
-		c.conn.Close()
-		return
+	// Retained messages [MQTT-3.3.1-6]
+	log.Printf("Checking retained messages for topic %s to see which to send", topic)
+	for t, msg := range c.broker.retained {
+		if matches(topic, t) {
+			log.Printf("Delivering retained message %s to client %s", msg.Topic, c.clientid)
+			// Retain flag set to 1 [MQTT-3.3.1-8]
+			c.send(msg, qos, true)
+		}
 	}
-
-	p := packet.NewPubrelPacket()
-	p.PacketID = pkt.PacketID
-	c.encoder.Write(p)
-	c.encoder.Flush()
 }
 
-// For QOS 2
-func (c *client) processComp(pkt *packet.PubcompPacket) {
-	log.Printf("Got Pubcomp for packet id %d", pkt.PacketID)
-	delete(c.outboundInTransit, pkt.PacketID)
+func (c *client) setReadDeadline() {
+	log.Printf("Using keepalive %d", c.keepalive)
+	if c.keepalive > 0 {
+		if err := c.conn.SetReadDeadline( time.Now().Add(time.Duration(c.keepalive) * time.Second) ) ; err != nil {
+			log.Printf("Error setting read deadline on network connection", err)
+		}
+	}
+}
+func (c *client) sendPacket(p packet.Packet) {
+	c.connectionMutex.Lock()
+	c.encoder.Write(p)
+	c.encoder.Flush()
+	c.connectionMutex.Unlock()
 }
 
 func (c *client) newPacketID() uint16 {

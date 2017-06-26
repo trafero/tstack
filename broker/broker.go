@@ -19,6 +19,13 @@ func NewBroker() *broker {
 }
 
 func (b *broker) AddClient(c *client) {
+	
+	if existingClient,exists := b.clients[c.clientid]; exists && c.cleanSession == false{
+		log.Println("Old client wants another shot")
+		// clientid already exists
+		c.inboundInTransit = existingClient.inboundInTransit
+		c.outboundInTransit = existingClient.outboundInTransit
+	}
 	b.mutex.Lock()
 	b.clients[c.clientid] = c
 	b.mutex.Unlock()
@@ -30,7 +37,7 @@ func (b *broker) receive(msg *packet.Message) {
 		for _, sub := range c.subscriptions {
 			if matches(sub.Topic, msg.Topic) {
 				log.Printf("Delivering message to client %s", c.clientid)
-				go c.Send(msg, sub.QOS)
+				go c.send(msg, sub.QOS)
 			}
 		}
 	}

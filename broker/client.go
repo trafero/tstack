@@ -14,6 +14,7 @@ type client struct {
 	broker           *broker
 	conn             net.Conn
 	auth             auth.Auth
+	cleanSession     bool
 	processedConnect bool
 	clientid         string
 	username         string
@@ -149,10 +150,10 @@ func (c *client) processConnect(pkt *packet.ConnectPacket) {
 		c.conn.Close()
 		return
 	}
-
 	// TODO check Clinet ID is not already in use
 	c.clientid = pkt.ClientID
-
+	
+	c.cleanSession = pkt.CleanSession
 	c.username = pkt.Username
 	c.rights = c.auth.Rights(c.username)
 
@@ -177,6 +178,11 @@ func (c *client) writeConnack(code packet.ConnackCode) {
 	connack.ReturnCode = code
 	c.encoder.Write(connack)
 	c.encoder.Flush()
+	
+	// Now we are connected, check if there's any unfinished business
+	for packetID, msg := range c.outboundInTransit {
+		c.resend(packetID, &msg)
+	}
 }
 
 func (c *client) processDisconnect(pkt *packet.DisconnectPacket) {
@@ -271,7 +277,7 @@ func (c *client) authorized(topic string) bool {
 	return matches(c.rights, topic)
 }
 
-func (c *client) Send(msg *packet.Message, qos byte) {
+func (c *client) send(msg *packet.Message, qos byte) {
 	log.Println("Sending message")
 	p := packet.NewPublishPacket()
 
@@ -290,10 +296,19 @@ func (c *client) Send(msg *packet.Message, qos byte) {
 	// Sec. 2.3.1
 	if qos > 0 {
 		p.PacketID = c.newPacketID()
+		c.outboundInTransit[p.PacketID] = p.Message
 	}
 	c.encoder.Write(p)
 	c.encoder.Flush()
-	c.outboundInTransit[p.PacketID] = p.Message
+}
+func (c *client) resend(packetID uint16, msg *packet.Message) {
+	log.Printf("Re-sending message %d", packetID)
+	p := packet.NewPublishPacket()
+	p.Message = *msg
+	p.Dup = true
+	p.PacketID = packetID
+	c.encoder.Write(p)
+	c.encoder.Flush()
 }
 
 // TODO build in resend if do not get a puback
@@ -309,13 +324,12 @@ func (c *client) processPubrec(pkt *packet.PubrecPacket) {
 	log.Printf("Got Publish Received for packet id %d", pkt.PacketID)
 
 	// Only send resonse if we have the message
-	/*
-		if _,ok := c.outboundInTransit[pkt.PacketID]; ! ok {
-			log.Println("Pubrec for a message that I do not have")
-			c.conn.Close()
-			return
-		}
-	*/
+	if _,ok := c.outboundInTransit[pkt.PacketID]; ! ok {
+		log.Println("Pubrec for a message that I do not have")
+		c.conn.Close()
+		return
+	}
+
 	p := packet.NewPubrelPacket()
 	p.PacketID = pkt.PacketID
 	c.encoder.Write(p)

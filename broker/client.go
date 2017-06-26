@@ -30,6 +30,7 @@ type client struct {
 	packetIDCounter  uint16
 	inboundInTransit map[uint16]packet.Message // QOS 2 messages to be received (and passeed to broker)
 	outboundInTransit map[uint16]packet.Message // QOS 2 messages to be sent
+	internalClientCounter int // For internal client ids (MQTT-3.1.3-6)
 	
 }
 
@@ -144,12 +145,18 @@ func (c *client) processConnect(pkt *packet.ConnectPacket) {
 		c.conn.Close()
 		return
 	}
-	if pkt.ClientID == "" {
+	// MQTT-3.1.3-8
+	if pkt.ClientID == "" && pkt.CleanSession == false {
 		c.writeConnack(packet.ErrIdentifierRejected)
-		log.Println("Blank client id")
 		c.conn.Close()
 		return
 	}
+	// MQTT-3.1.3-6
+	if pkt.ClientID == "" {
+		// Must be a clean session, which we know already from above
+		pkt.ClientID = c.newInternalClientID()
+	}
+	
 	// TODO check Clinet ID is not already in use
 	c.clientid = pkt.ClientID
 	
@@ -359,6 +366,11 @@ func (c *client) sendPacket(p packet.Packet) {
 	c.encoder.Write(p)
 	c.encoder.Flush()
 	c.connectionMutex.Unlock()
+}
+func (c *client) newInternalClientID() (string) {
+	c.internalClientCounter ++
+	return "internalClient" + string(c.internalClientCounter)
+	
 }
 
 func (c *client) newPacketID() uint16 {

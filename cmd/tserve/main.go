@@ -4,16 +4,18 @@ import (
 	nettls "crypto/tls"
 	"flag"
 	etcdauth "github.com/trafero/tstack/auth/etcd"
-	"github.com/trafero/tstack/mqtt"
+	"github.com/trafero/tstack/auth"
 	"github.com/trafero/tstack/tls"
 	"github.com/trafero/tstack/tstackutil"
+	"github.com/trafero/tstack/serve"
 	"log"
 	"net"
-	"runtime"
 	"strings"
 )
 
 var addr, addrTls, etcdhosts, certfile, keyfile, cafile string
+var broker *serve.Broker
+var authenticator auth.Auth
 
 func init() {
 
@@ -28,6 +30,8 @@ func init() {
 
 func main() {
 
+	var err error
+	
 	// Check command line arguments
 	if etcdhosts == "" {
 		flag.Usage()
@@ -41,19 +45,20 @@ func main() {
 
 	// Authentication using ETCD
 	log.Printf("Using etcd hosts: %s", etcdhosts)
-	a, err := etcdauth.New(strings.Split(etcdhosts, " "))
+	authenticator, err = etcdauth.New(strings.Split(etcdhosts, " "))
 	checkErr(err)
-
-	// MQQT subscriptions service (used for both of the MQTT servers)
-	subs := mqtt.NewSubscriptions(runtime.GOMAXPROCS(0))
+	
+	// MQTT broker back end
+	broker = serve.NewBroker()
+	
 
 	// Unencrypted MQTT server
 	if addr != "" {
 		log.Printf("Running MQTT server on %s", addr)
 		l, err := net.Listen("tcp", addr)
 		checkErr(err)
-		svr1 := mqtt.NewServer(a, l, subs)
-		go svr1.Start()
+		defer l.Close()
+		go handleServer(l)
 	}
 
 	// Encrypted MQTT server
@@ -67,15 +72,24 @@ func main() {
 		log.Printf("Running encypted MQTT server on %s", addrTls)
 		tlsconfig, err := tls.TLSConfig(cafile, certfile, keyfile)
 		checkErr(err)
-		lTls, err := nettls.Listen("tcp", addrTls, tlsconfig)
+		l, err := nettls.Listen("tcp", addrTls, tlsconfig)
 		checkErr(err)
-		svr2 := mqtt.NewServer(a, lTls, subs)
-		svr2.Start()
+		defer l.Close()
+		go handleServer(l)
 	}
 
 	// Wait forever
 	select {}
 
+}
+
+func handleServer(l net.Listener) {
+	for {
+		connection, err := l.Accept()
+		checkErr(err)
+		client := serve.NewClient(authenticator, broker, connection)
+		go client.HandleConnection()
+	}
 }
 
 func checkErr(err error) {

@@ -12,7 +12,7 @@ import (
 )
 
 type client struct {
-	broker                *broker
+	broker                *Broker
 	conn                  net.Conn
 	auth                  auth.Auth
 	cleanSession          bool
@@ -34,7 +34,7 @@ type client struct {
 
 }
 
-func NewClient(a auth.Auth, b *broker, c net.Conn) *client {
+func NewClient(a auth.Auth, b *Broker, c net.Conn) *client {
 	return &client{
 		auth:              a,
 		broker:            b,

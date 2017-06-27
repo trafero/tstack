@@ -6,21 +6,21 @@ import (
 	"sync"
 )
 
-type broker struct {
+type Broker struct {
 	clients  map[string]*client         // Map by clientid
 	retained map[string]*packet.Message // Map by topic
 	mutex    *sync.Mutex
 }
 
-func NewBroker() *broker {
-	return &broker{
+func NewBroker() *Broker {
+	return &Broker{
 		mutex:    &sync.Mutex{},
 		clients:  make(map[string]*client),
 		retained: make(map[string]*packet.Message),
 	}
 }
 
-func (b *broker) AddClient(c *client) {
+func (b *Broker) AddClient(c *client) {
 
 	// Clean session: [MQTT-3.1.2-6]
 	if existingClient, exists := b.clients[c.clientid]; exists && c.cleanSession == false {
@@ -35,7 +35,7 @@ func (b *broker) AddClient(c *client) {
 	b.mutex.Unlock()
 }
 
-func (b *broker) deliver(msg *packet.Message) {
+func (b *Broker) deliver(msg *packet.Message) {
 	log.Printf("Delivering message %s", msg)
 	if msg.Retain {
 		b.mutex.Lock()

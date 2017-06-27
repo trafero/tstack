@@ -25,12 +25,22 @@ Start the service using these command line options:
     	list of etcd endpoints. e.g. 'http://etcd0:2379 http://etcd1:2379'
   -keyfile string
     	TLS key file (default "/certs/mqtt.key")
+  -authentication bool (default true)
+        Use authentication (default true). etcdhosts is not required if this is set to false.
 ```
 
 ### Example Usage
+
+To run without encryption and no authentication:
+
+```
+tserve -addr=0.0.0.0:1883 -authentication=false
+```
+
 
 To run without encryption and using a local etcd key-value store:
 
 ```
 tserve -addr=0.0.0.0:1883 -etcdhosts=http://localhost:2379
 ```
+

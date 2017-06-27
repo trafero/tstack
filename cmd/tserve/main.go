@@ -4,6 +4,7 @@ import (
 	nettls "crypto/tls"
 	"flag"
 	etcdauth "github.com/trafero/tstack/auth/etcd"
+	authall "github.com/trafero/tstack/auth/all"
 	"github.com/trafero/tstack/auth"
 	"github.com/trafero/tstack/tls"
 	"github.com/trafero/tstack/tstackutil"
@@ -14,8 +15,11 @@ import (
 )
 
 var addr, addrTls, etcdhosts, certfile, keyfile, cafile string
+var authentication bool
+
 var broker *serve.Broker
 var authenticator auth.Auth
+
 
 func init() {
 
@@ -25,6 +29,7 @@ func init() {
 	flag.StringVar(&certfile, "certfile", "/certs/mqtt.crt", "TLS certificate file")
 	flag.StringVar(&keyfile, "keyfile", "/certs/mqtt.key", "TLS key file")
 	flag.StringVar(&cafile, "cafile", "/certs/ca.crt", "CA certificate")
+	flag.BoolVar(&authentication, "authentication", true, "Use authentication")
 	flag.Parse()
 }
 
@@ -32,22 +37,27 @@ func main() {
 
 	var err error
 	
-	// Check command line arguments
-	if etcdhosts == "" {
-		flag.Usage()
-		log.Fatal("etcdhosts argument missing")
-	}
-
 	if addr == "" && addrTls == "" {
 		flag.Usage()
 		log.Fatal("addr and addrTls cannot both be missing")
 	}
 
-	// Authentication using ETCD
-	log.Printf("Using etcd hosts: %s", etcdhosts)
-	authenticator, err = etcdauth.New(strings.Split(etcdhosts, " "))
-	checkErr(err)
 	
+	if authentication {
+		if etcdhosts == "" {
+			flag.Usage()
+			log.Fatal("etcdhosts argument missing")
+		}
+		// Authentication using ETCD
+		log.Printf("Using etcd hosts: %s", etcdhosts)
+		authenticator, err = etcdauth.New(strings.Split(etcdhosts, " "))
+		checkErr(err)
+	} else {
+		// Authentication using dummy authenticator which allows all and gives
+		// everyone '#' rights (not access to topics starting with $)
+		authenticator, _ = authall.New()
+	}
+		
 	// MQTT broker back end
 	broker = serve.NewBroker()
 	

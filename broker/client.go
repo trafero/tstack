@@ -100,34 +100,6 @@ func (c *client) HandleConnection() {
 		c.broker.deliver(c.will)
 	}
 }
-
-/*
- * PUBREL – Publish release (QoS 2 publish received, part 2)
- */
-func (c *client) processPubrel(pkt *packet.PubrelPacket) {
-	log.Println("Got Pubrel")
-	msg := c.inboundInTransit[pkt.PacketID]
-
-	if unsafe.Sizeof(msg) != 0 {
-		// msg is not an empty stuct
-		c.broker.deliver(&msg)
-		delete(c.inboundInTransit, pkt.PacketID)
-		p := packet.NewPubcompPacket()
-		p.PacketID = pkt.PacketID
-		c.sendPacket(p)
-	}
-
-}
-
-/*
- * PINGREQ – PING request (3.1.2)
- */
-func (c *client) processPing(pkt *packet.PingreqPacket) {
-	log.Println("Got ping request")
-	p := packet.NewPingrespPacket()
-	c.sendPacket(p)
-}
-
 /*
  * CONNECT – Client requests a connection to a Server (3.1)
  */
@@ -183,7 +155,6 @@ func (c *client) processConnect(pkt *packet.ConnectPacket) {
 	c.broker.AddClient(c)
 	c.writeConnack(packet.ConnectionAccepted)
 }
-
 /*
 * CONNACK – Acknowledge connection request (3.2)
  */
@@ -199,17 +170,6 @@ func (c *client) writeConnack(code packet.ConnackCode) {
 		c.resend(packetID, &msg)
 	}
 }
-
-/*
- * DISCONNECT – Disconnect notification(3.14)
- */
-func (c *client) processDisconnect(pkt *packet.DisconnectPacket) {
-	//discard Will
-	c.will = nil
-	// Close connection if the client has not already done so
-	c.conn.Close()
-}
-
 /*
  * PUBLISH – Publish message (3.3)
  */
@@ -253,7 +213,53 @@ func (c *client) processPublish(pkt *packet.PublishPacket) {
 		}
 	}
 }
+/*
+ *  PUBACK – Publish acknowledgement (3.4)
+ */
+func (c *client) processPuback(pkt *packet.PubackPacket) {
+	log.Printf("Got Publish Ack for packet id %d", pkt.PacketID)
+	delete(c.outboundInTransit, pkt.PacketID)
+}
+/*
+ * PUBREC – Publish received (QoS 2 publish received, part 1) (3.5)
+ */
+func (c *client) processPubrec(pkt *packet.PubrecPacket) {
+	log.Printf("Got Publish Received for packet id %d", pkt.PacketID)
 
+	// Only send resonse if we have the message
+	if _, ok := c.outboundInTransit[pkt.PacketID]; !ok {
+		log.Println("Pubrec for a message that I do not have")
+		c.conn.Close()
+		return
+	}
+	p := packet.NewPubrelPacket()
+	p.PacketID = pkt.PacketID
+	c.sendPacket(p)
+}
+/*
+ * PUBREL – Publish release (QoS 2 publish received, part 2) (3.6)
+ */
+func (c *client) processPubrel(pkt *packet.PubrelPacket) {
+	log.Println("Got Pubrel")
+	msg := c.inboundInTransit[pkt.PacketID]
+
+	if unsafe.Sizeof(msg) != 0 {
+		// msg is not an empty stuct
+		c.broker.deliver(&msg)
+		delete(c.inboundInTransit, pkt.PacketID)
+		p := packet.NewPubcompPacket()
+		p.PacketID = pkt.PacketID
+		c.sendPacket(p)
+	}
+
+}
+/*
+ * PUBCOMP – Publish complete (QoS 2 publish received, part 3) (3.7)
+ */
+func (c *client) processComp(pkt *packet.PubcompPacket) {
+	log.Printf("Got Pubcomp for packet id %d", pkt.PacketID)
+	delete(c.outboundInTransit, pkt.PacketID)
+}
 /*
  * SUBSCRIBE - Subscribe to topics (3.8)
  */
@@ -279,7 +285,6 @@ func (c *client) processSubscribe(pkt *packet.SubscribePacket) {
 	}
 	c.sendPacket(suback) // SUBACK 3.9
 }
-
 /*
  * UNSUBSCRIBE – Unsubscribe from topics (3.10)
  */
@@ -297,38 +302,22 @@ func (c *client) processUnsubscribe(pkt *packet.UnsubscribePacket) {
 	p.PacketID = pkt.PacketID
 	c.sendPacket(p) // UNSUBACK 3.11
 }
-
 /*
- *  PUBACK – Publish acknowledgement (3.4)
+ * PINGREQ – PING request (3.12)
  */
-func (c *client) processPuback(pkt *packet.PubackPacket) {
-	log.Printf("Got Publish Ack for packet id %d", pkt.PacketID)
-	delete(c.outboundInTransit, pkt.PacketID)
+func (c *client) processPing(pkt *packet.PingreqPacket) {
+	log.Println("Got ping request")
+	p := packet.NewPingrespPacket()
+	c.sendPacket(p) // PINGRESP 3.13
 }
-
 /*
- * PUBREC – Publish received (QoS 2 publish received, part 1) (3.5)
+ * DISCONNECT – Disconnect notification(3.14)
  */
-func (c *client) processPubrec(pkt *packet.PubrecPacket) {
-	log.Printf("Got Publish Received for packet id %d", pkt.PacketID)
-
-	// Only send resonse if we have the message
-	if _, ok := c.outboundInTransit[pkt.PacketID]; !ok {
-		log.Println("Pubrec for a message that I do not have")
-		c.conn.Close()
-		return
-	}
-	p := packet.NewPubrelPacket()
-	p.PacketID = pkt.PacketID
-	c.sendPacket(p)
-}
-
-/*
- * PUBCOMP – Publish complete (QoS 2 publish received, part 3) (3.7)
- */
-func (c *client) processComp(pkt *packet.PubcompPacket) {
-	log.Printf("Got Pubcomp for packet id %d", pkt.PacketID)
-	delete(c.outboundInTransit, pkt.PacketID)
+func (c *client) processDisconnect(pkt *packet.DisconnectPacket) {
+	//discard Will
+	c.will = nil
+	// Close connection if the client has not already done so
+	c.conn.Close()
 }
 
 func (c *client) send(msg *packet.Message, qos byte, retain bool) {
@@ -385,12 +374,14 @@ func (c *client) setReadDeadline() {
 		}
 	}
 }
+
 func (c *client) sendPacket(p packet.Packet) {
 	c.connectionMutex.Lock()
 	c.encoder.Write(p)
 	c.encoder.Flush()
 	c.connectionMutex.Unlock()
 }
+
 func (c *client) newInternalClientID() string {
 	c.internalClientCounter++
 	return "internalClient" + string(c.internalClientCounter)
@@ -401,3 +392,4 @@ func (c *client) newPacketID() uint16 {
 	c.packetIDCounter++
 	return c.packetIDCounter
 }
+

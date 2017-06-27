@@ -1,4 +1,4 @@
-package broker
+package serve
 
 import (
 	"github.com/gomqtt/packet"
@@ -100,6 +100,7 @@ func (c *client) HandleConnection() {
 		c.broker.deliver(c.will)
 	}
 }
+
 /*
  * CONNECT – Client requests a connection to a Server (3.1)
  */
@@ -155,6 +156,7 @@ func (c *client) processConnect(pkt *packet.ConnectPacket) {
 	c.broker.AddClient(c)
 	c.writeConnack(packet.ConnectionAccepted)
 }
+
 /*
 * CONNACK – Acknowledge connection request (3.2)
  */
@@ -170,6 +172,7 @@ func (c *client) writeConnack(code packet.ConnackCode) {
 		c.resend(packetID, &msg)
 	}
 }
+
 /*
  * PUBLISH – Publish message (3.3)
  */
@@ -213,6 +216,7 @@ func (c *client) processPublish(pkt *packet.PublishPacket) {
 		}
 	}
 }
+
 /*
  *  PUBACK – Publish acknowledgement (3.4)
  */
@@ -220,6 +224,7 @@ func (c *client) processPuback(pkt *packet.PubackPacket) {
 	log.Printf("Got Publish Ack for packet id %d", pkt.PacketID)
 	delete(c.outboundInTransit, pkt.PacketID)
 }
+
 /*
  * PUBREC – Publish received (QoS 2 publish received, part 1) (3.5)
  */
@@ -236,6 +241,7 @@ func (c *client) processPubrec(pkt *packet.PubrecPacket) {
 	p.PacketID = pkt.PacketID
 	c.sendPacket(p)
 }
+
 /*
  * PUBREL – Publish release (QoS 2 publish received, part 2) (3.6)
  */
@@ -253,6 +259,7 @@ func (c *client) processPubrel(pkt *packet.PubrelPacket) {
 	}
 
 }
+
 /*
  * PUBCOMP – Publish complete (QoS 2 publish received, part 3) (3.7)
  */
@@ -260,6 +267,7 @@ func (c *client) processComp(pkt *packet.PubcompPacket) {
 	log.Printf("Got Pubcomp for packet id %d", pkt.PacketID)
 	delete(c.outboundInTransit, pkt.PacketID)
 }
+
 /*
  * SUBSCRIBE - Subscribe to topics (3.8)
  */
@@ -285,6 +293,7 @@ func (c *client) processSubscribe(pkt *packet.SubscribePacket) {
 	}
 	c.sendPacket(suback) // SUBACK 3.9
 }
+
 /*
  * UNSUBSCRIBE – Unsubscribe from topics (3.10)
  */
@@ -302,6 +311,7 @@ func (c *client) processUnsubscribe(pkt *packet.UnsubscribePacket) {
 	p.PacketID = pkt.PacketID
 	c.sendPacket(p) // UNSUBACK 3.11
 }
+
 /*
  * PINGREQ – PING request (3.12)
  */
@@ -310,6 +320,7 @@ func (c *client) processPing(pkt *packet.PingreqPacket) {
 	p := packet.NewPingrespPacket()
 	c.sendPacket(p) // PINGRESP 3.13
 }
+
 /*
  * DISCONNECT – Disconnect notification(3.14)
  */
@@ -392,4 +403,3 @@ func (c *client) newPacketID() uint16 {
 	c.packetIDCounter++
 	return c.packetIDCounter
 }
-

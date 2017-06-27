@@ -2,7 +2,7 @@ package main
 
 import (
 	authall "github.com/trafero/tstack/auth/all"
-	"github.com/trafero/tstack/broker"
+	"github.com/trafero/tstack/serve"
 	"log"
 	"net"
 )
@@ -12,7 +12,7 @@ import (
  */
 func main() {
 	a, _ := authall.New()
-	b := broker.NewBroker()
+	b := serve.NewBroker()
 
 	log.Println("Listening for MQTT connections")
 	l, err := net.Listen("tcp", "0.0.0.0:1883")
@@ -22,7 +22,7 @@ func main() {
 	for {
 		c, err := l.Accept()
 		checkErr(err)
-		client := broker.NewClient(a, b, c)
+		client := serve.NewClient(a, b, c)
 		go client.HandleConnection()
 	}
 }

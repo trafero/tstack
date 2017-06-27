@@ -105,7 +105,6 @@ func (c *client) HandleConnection() {
  * CONNECT – Client requests a connection to a Server (3.1)
  */
 func (c *client) processConnect(pkt *packet.ConnectPacket) {
-	log.Printf("Got connect packet %v", pkt)
 	if c.processedConnect {
 		log.Println("Connect packet received for a second time on same connection")
 		// No acknowledgement, just disconnect
@@ -120,7 +119,7 @@ func (c *client) processConnect(pkt *packet.ConnectPacket) {
 	}
 	if c.auth.Authenticate(pkt.Username, pkt.Password) == false {
 		c.writeConnack(packet.ErrNotAuthorized)
-		log.Println("User could not be authenticated")
+		log.Printf("User %s could not be authenticated", pkt.Username)
 		c.conn.Close()
 		return
 	}
@@ -148,11 +147,8 @@ func (c *client) processConnect(pkt *packet.ConnectPacket) {
 	} else {
 		c.will = pkt.Will // May be nil but that is ok
 	}
-
-	log.Printf("Got a keepalive of %d", pkt.KeepAlive)
 	c.keepalive = pkt.KeepAlive
 	c.setReadDeadline()
-
 	c.broker.AddClient(c)
 	c.writeConnack(packet.ConnectionAccepted)
 }
@@ -177,7 +173,6 @@ func (c *client) writeConnack(code packet.ConnackCode) {
  * PUBLISH – Publish message (3.3)
  */
 func (c *client) processPublish(pkt *packet.PublishPacket) {
-	log.Printf("Got publish packet %v", pkt)
 	if !matches(c.rights, pkt.Message.Topic) {
 		// TODO send code back?
 		log.Printf("Not authorized to publish to topic %s", pkt.Message.Topic)
@@ -221,7 +216,6 @@ func (c *client) processPublish(pkt *packet.PublishPacket) {
  *  PUBACK – Publish acknowledgement (3.4)
  */
 func (c *client) processPuback(pkt *packet.PubackPacket) {
-	log.Printf("Got Publish Ack for packet id %d", pkt.PacketID)
 	delete(c.outboundInTransit, pkt.PacketID)
 }
 
@@ -229,8 +223,6 @@ func (c *client) processPuback(pkt *packet.PubackPacket) {
  * PUBREC – Publish received (QoS 2 publish received, part 1) (3.5)
  */
 func (c *client) processPubrec(pkt *packet.PubrecPacket) {
-	log.Printf("Got Publish Received for packet id %d", pkt.PacketID)
-
 	// Only send resonse if we have the message
 	if _, ok := c.outboundInTransit[pkt.PacketID]; !ok {
 		log.Println("Pubrec for a message that I do not have")
@@ -246,7 +238,6 @@ func (c *client) processPubrec(pkt *packet.PubrecPacket) {
  * PUBREL – Publish release (QoS 2 publish received, part 2) (3.6)
  */
 func (c *client) processPubrel(pkt *packet.PubrelPacket) {
-	log.Println("Got Pubrel")
 	msg := c.inboundInTransit[pkt.PacketID]
 
 	if unsafe.Sizeof(msg) != 0 {
@@ -264,7 +255,6 @@ func (c *client) processPubrel(pkt *packet.PubrelPacket) {
  * PUBCOMP – Publish complete (QoS 2 publish received, part 3) (3.7)
  */
 func (c *client) processComp(pkt *packet.PubcompPacket) {
-	log.Printf("Got Pubcomp for packet id %d", pkt.PacketID)
 	delete(c.outboundInTransit, pkt.PacketID)
 }
 
@@ -272,9 +262,6 @@ func (c *client) processComp(pkt *packet.PubcompPacket) {
  * SUBSCRIBE - Subscribe to topics (3.8)
  */
 func (c *client) processSubscribe(pkt *packet.SubscribePacket) {
-
-	log.Printf("Got subscribe packet %v", pkt)
-
 	suback := packet.NewSubackPacket()
 	suback.PacketID = pkt.PacketID
 
@@ -298,14 +285,10 @@ func (c *client) processSubscribe(pkt *packet.SubscribePacket) {
  * UNSUBSCRIBE – Unsubscribe from topics (3.10)
  */
 func (c *client) processUnsubscribe(pkt *packet.UnsubscribePacket) {
-	log.Println("Got unsubscribe packet")
 	c.mutex.Lock()
 	for _, t := range pkt.Topics {
-		log.Printf("Unsubscribing from %s", t)
 		delete(c.subscriptions, t)
 	}
-	log.Printf("Subscriptions: %s:", c.subscriptions)
-
 	c.mutex.Unlock()
 	p := packet.NewUnsubackPacket()
 	p.PacketID = pkt.PacketID
@@ -316,7 +299,6 @@ func (c *client) processUnsubscribe(pkt *packet.UnsubscribePacket) {
  * PINGREQ – PING request (3.12)
  */
 func (c *client) processPing(pkt *packet.PingreqPacket) {
-	log.Println("Got ping request")
 	p := packet.NewPingrespPacket()
 	c.sendPacket(p) // PINGRESP 3.13
 }
@@ -332,7 +314,6 @@ func (c *client) processDisconnect(pkt *packet.DisconnectPacket) {
 }
 
 func (c *client) send(msg *packet.Message, qos byte, retain bool) {
-	log.Println("Sending message")
 	p := packet.NewPublishPacket()
 
 	// Re-pack the messgae to use the reciever's QoS
@@ -343,7 +324,6 @@ func (c *client) send(msg *packet.Message, qos byte, retain bool) {
 		QOS:     qos,
 		Retain:  retain,
 	}
-
 	p.Message = *m
 	// TODO set to true if this is a retry
 	p.Dup = false
@@ -352,7 +332,6 @@ func (c *client) send(msg *packet.Message, qos byte, retain bool) {
 		p.PacketID = c.newPacketID()
 		c.outboundInTransit[p.PacketID] = p.Message
 	}
-
 	c.sendPacket(p)
 }
 
@@ -368,10 +347,8 @@ func (c *client) resend(packetID uint16, msg *packet.Message) {
 func (c *client) sendRetained(topic string, qos uint8) {
 
 	// Retained messages [MQTT-3.3.1-6]
-	log.Printf("Checking retained messages for topic %s to see which to send", topic)
 	for t, msg := range c.broker.retained {
 		if matches(topic, t) {
-			log.Printf("Delivering retained message %s to client %s", msg.Topic, c.clientid)
 			// Retain flag set to 1 [MQTT-3.3.1-8]
 			c.send(msg, qos, true)
 		}

@@ -2,7 +2,6 @@ package serve
 
 import (
 	"github.com/gomqtt/packet"
-	"log"
 	"sync"
 )
 
@@ -24,7 +23,6 @@ func (b *Broker) AddClient(c *client) {
 
 	// Clean session: [MQTT-3.1.2-6]
 	if existingClient, exists := b.clients[c.clientid]; exists && c.cleanSession == false {
-		log.Println("Old client wants another shot")
 		// clientid already exists
 		c.inboundInTransit = existingClient.inboundInTransit
 		c.outboundInTransit = existingClient.outboundInTransit
@@ -36,7 +34,6 @@ func (b *Broker) AddClient(c *client) {
 }
 
 func (b *Broker) deliver(msg *packet.Message) {
-	log.Printf("Delivering message %s", msg)
 	if msg.Retain {
 		b.mutex.Lock()
 		if len(msg.Payload) == 0 {
@@ -50,7 +47,6 @@ func (b *Broker) deliver(msg *packet.Message) {
 	for _, c := range b.clients {
 		for topic, sub := range c.subscriptions {
 			if matches(topic, msg.Topic) {
-				log.Printf("Delivering message %s to client %s", msg.Topic, c.clientid)
 				// Retain to false for all normal subscriptions MQTT-3.3.1-9
 				go c.send(msg, sub.QOS, false)
 			}

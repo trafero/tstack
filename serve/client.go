@@ -99,6 +99,11 @@ func (c *client) HandleConnection() {
 	if c.will != nil {
 		c.broker.deliver(c.will)
 	}
+	
+	// Remove the client from the list
+	if c.keepalive != 1 {
+		c.broker.RemoveClient(c)
+	}
 }
 
 /*

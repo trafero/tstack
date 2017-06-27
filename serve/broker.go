@@ -5,22 +5,23 @@ import (
 	"sync"
 )
 
+
 type Broker struct {
+	sync.RWMutex
 	clients  map[string]*client         // Map by clientid
 	retained map[string]*packet.Message // Map by topic
-	mutex    *sync.Mutex
 }
 
 func NewBroker() *Broker {
 	return &Broker{
-		mutex:    &sync.Mutex{},
 		clients:  make(map[string]*client),
 		retained: make(map[string]*packet.Message),
 	}
 }
 
 func (b *Broker) AddClient(c *client) {
-
+	
+	b.RLock()
 	// Clean session: [MQTT-3.1.2-6]
 	if existingClient, exists := b.clients[c.clientid]; exists && c.cleanSession == false {
 		// clientid already exists
@@ -28,22 +29,31 @@ func (b *Broker) AddClient(c *client) {
 		c.outboundInTransit = existingClient.outboundInTransit
 		c.subscriptions = existingClient.subscriptions
 	}
-	b.mutex.Lock()
+	b.RUnlock()
+	b.Lock()
 	b.clients[c.clientid] = c
-	b.mutex.Unlock()
+	b.Unlock()
+}
+
+func (b *Broker) RemoveClient(c *client) {
+	
+	b.Lock()
+	delete(b.clients, c.clientid)
+	b.Unlock()
 }
 
 func (b *Broker) deliver(msg *packet.Message) {
 	if msg.Retain {
-		b.mutex.Lock()
+		b.Lock()
 		if len(msg.Payload) == 0 {
 			// MQTT-3.3.1-10
 			delete(b.retained, msg.Topic)
 		} else {
 			b.retained[msg.Topic] = msg
 		}
-		b.mutex.Unlock()
+		b.Unlock()
 	}
+	b.RLock()
 	for _, c := range b.clients {
 		for topic, sub := range c.subscriptions {
 			if matches(topic, msg.Topic) {
@@ -52,4 +62,5 @@ func (b *Broker) deliver(msg *packet.Message) {
 			}
 		}
 	}
+	b.RUnlock()
 }

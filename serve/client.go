@@ -12,18 +12,18 @@ import (
 )
 
 type client struct {
-	broker                *Broker
-	conn                  net.Conn
-	auth                  auth.Auth
-	cleanSession          bool
-	processedConnect      bool
-	clientid              string
-	username              string
-	rights                string
-	will                  *packet.Message
-	keepalive             uint16
-	encoder               *packet.Encoder
-	decoder               *packet.Decoder
+	broker           *Broker
+	conn             net.Conn
+	auth             auth.Auth
+	cleanSession     bool
+	processedConnect bool
+	clientid         string
+	username         string
+	rights           string
+	will             *packet.Message
+	keepalive        uint16
+	encoder          *packet.Encoder
+	// decoder               *packet.Decoder
 	subscriptions         map[string]packet.Subscription // Mapped by topic
 	mutex                 *sync.Mutex
 	connectionMutex       *sync.Mutex
@@ -53,10 +53,14 @@ func NewClient(a auth.Auth, b *Broker, c net.Conn) *client {
 func (c *client) HandleConnection() {
 	var err error
 	var pkt packet.Packet
-	c.decoder = packet.NewDecoder(c.conn)
+
+	defer c.conn.Close()
+
 	c.encoder = packet.NewEncoder(c.conn)
+
+	decoder := packet.NewDecoder(c.conn) // Only required in this loop
 	for {
-		pkt, err = c.decoder.Read()
+		pkt, err = decoder.Read()
 		if err != nil {
 			if err == io.EOF {
 				log.Println("Connection disconnected")
@@ -99,7 +103,7 @@ func (c *client) HandleConnection() {
 	if c.will != nil {
 		c.broker.deliver(c.will)
 	}
-	
+
 	// Remove the client from the list
 	if c.keepalive != 1 {
 		c.broker.RemoveClient(c)
@@ -122,12 +126,14 @@ func (c *client) processConnect(pkt *packet.ConnectPacket) {
 		c.conn.Close()
 		return
 	}
+
 	if c.auth.Authenticate(pkt.Username, pkt.Password) == false {
 		c.writeConnack(packet.ErrNotAuthorized)
 		log.Printf("User %s could not be authenticated", pkt.Username)
 		c.conn.Close()
 		return
 	}
+
 	// MQTT-3.1.3-8
 	if pkt.ClientID == "" && pkt.CleanSession == false {
 		c.writeConnack(packet.ErrIdentifierRejected)
@@ -330,7 +336,6 @@ func (c *client) send(msg *packet.Message, qos byte, retain bool) {
 		Retain:  retain,
 	}
 	p.Message = *m
-	// TODO set to true if this is a retry
 	p.Dup = false
 	// Sec. 2.3.1
 	if qos > 0 {

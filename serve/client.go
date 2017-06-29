@@ -101,11 +101,11 @@ func (c *client) HandleConnection() {
 	// Send out with last will. Last will set to nill if never set or
 	// client send disconnect
 	if c.will != nil {
-		c.broker.deliver(c.will)
+		c.broker.deliverChan <- c.will
 	}
 
 	// Remove the client from the list
-	if c.keepalive != 1 {
+	if c.cleanSession == true {
 		c.broker.RemoveClient(c)
 	}
 }
@@ -196,11 +196,12 @@ func (c *client) processPublish(pkt *packet.PublishPacket) {
 
 		case packet.QOSAtMostOnce:
 			// QOS 0
-			c.broker.deliver(&pkt.Message)
+			// log.Printf("Delivering topic %s", pkt.Message.Topic)
+			c.broker.deliverChan <- &pkt.Message
 
 		case packet.QOSAtLeastOnce:
 			// QOS 1
-			c.broker.deliver(&pkt.Message)
+			c.broker.deliverChan <- &pkt.Message
 			p := packet.NewPubackPacket()
 			p.PacketID = pkt.PacketID
 			c.sendPacket(p)
@@ -253,13 +254,12 @@ func (c *client) processPubrel(pkt *packet.PubrelPacket) {
 
 	if unsafe.Sizeof(msg) != 0 {
 		// msg is not an empty stuct
-		c.broker.deliver(&msg)
+		c.broker.deliverChan <- &msg
 		delete(c.inboundInTransit, pkt.PacketID)
 		p := packet.NewPubcompPacket()
 		p.PacketID = pkt.PacketID
 		c.sendPacket(p)
 	}
-
 }
 
 /*
@@ -373,6 +373,7 @@ func (c *client) setReadDeadline() {
 	}
 }
 
+// TODO use a channel?
 func (c *client) sendPacket(p packet.Packet) {
 	c.connectionMutex.Lock()
 	c.encoder.Write(p)

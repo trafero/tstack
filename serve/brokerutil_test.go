@@ -1,6 +1,7 @@
 package serve
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -71,4 +72,17 @@ func TestMatcher(t *testing.T) {
 		t.Error("Wildcard should match on $ if not at the start")
 	}
 
+}
+
+// Calling the same underlying code as TestValidate
+func TestAllTopics(t *testing.T) {
+
+	ans := allTopics("this")
+	if len(ans) != 3 {
+		t.Error("Expected 3 answers, got " + strings.Join(ans, ","))
+	}
+	ans = allTopics("one/two")
+	if len(ans) != 11 {
+		t.Error("Expected 11 answers, got " + strings.Join(ans, ","))
+	}
 }

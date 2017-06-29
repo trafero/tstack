@@ -3,15 +3,18 @@ package main
 import (
 	nettls "crypto/tls"
 	"flag"
-	etcdauth "github.com/trafero/tstack/auth/etcd"
-	authall "github.com/trafero/tstack/auth/all"
 	"github.com/trafero/tstack/auth"
+	authall "github.com/trafero/tstack/auth/all"
+	etcdauth "github.com/trafero/tstack/auth/etcd"
+	"github.com/trafero/tstack/serve"
 	"github.com/trafero/tstack/tls"
 	"github.com/trafero/tstack/tstackutil"
-	"github.com/trafero/tstack/serve"
 	"log"
 	"net"
 	"strings"
+
+	"net/http"
+	_ "net/http/pprof"
 )
 
 var addr, addrTls, etcdhosts, certfile, keyfile, cafile string
@@ -19,7 +22,6 @@ var authentication bool
 
 var broker *serve.Broker
 var authenticator auth.Auth
-
 
 func init() {
 
@@ -35,14 +37,16 @@ func init() {
 
 func main() {
 
+	// For pprof profiler (at http://localhost:8070/debug/pprof/ )
+	go http.ListenAndServe("localhost:8070", nil) // For pprof
+
 	var err error
-	
+
 	if addr == "" && addrTls == "" {
 		flag.Usage()
 		log.Fatal("addr and addrTls cannot both be missing")
 	}
 
-	
 	if authentication {
 		if etcdhosts == "" {
 			flag.Usage()
@@ -57,18 +61,17 @@ func main() {
 		// everyone '#' rights (not access to topics starting with $)
 		authenticator, _ = authall.New()
 	}
-		
+
 	// MQTT broker back end
 	broker = serve.NewBroker()
-	
 
 	// Unencrypted MQTT server
 	if addr != "" {
 		log.Printf("Running MQTT server on %s", addr)
 		l, err := net.Listen("tcp", addr)
 		checkErr(err)
-		defer l.Close()
 		go handleServer(l)
+		defer l.Close()
 	}
 
 	// Encrypted MQTT server
@@ -84,8 +87,8 @@ func main() {
 		checkErr(err)
 		l, err := nettls.Listen("tcp", addrTls, tlsconfig)
 		checkErr(err)
-		defer l.Close()
 		go handleServer(l)
+		defer l.Close()
 	}
 
 	// Wait forever
@@ -94,6 +97,7 @@ func main() {
 }
 
 func handleServer(l net.Listener) {
+
 	for {
 		connection, err := l.Accept()
 		checkErr(err)

@@ -57,13 +57,17 @@ func (b *Broker) deliveryRound() {
 			}
 			b.Unlock()
 		}
+
 		b.RLock()
+		allMatchers := allTopics(msg.Topic) // All possible matches for msg.topic
 		for _, c := range b.clients {
-			for topic, sub := range c.subscriptions {
-				if matches(topic, msg.Topic) {
+			for _, matcher := range allMatchers {
+				c.mutex.Lock()
+				if sub, ok := c.subscriptions[matcher]; ok {
 					// Retain to false for all normal subscriptions MQTT-3.3.1-9
 					go c.send(msg, sub.QOS, false)
 				}
+				c.mutex.Unlock()
 			}
 		}
 		b.RUnlock()

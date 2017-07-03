@@ -13,4 +13,8 @@ Tstack consists of several components:
 
 There's a [quickstart](quickstart.md) guide to get a stack running quickly with docker.
 
-Also see the [frequently asked questions](faq.md).
+Also see:
+
+* [frequently asked questions](faq.md)
+* [Notes on performance tuning as well as testing](performance.md)
+

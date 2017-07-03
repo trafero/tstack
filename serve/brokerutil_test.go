@@ -82,7 +82,7 @@ func TestAllTopics(t *testing.T) {
 		t.Error("Expected 3 answers, got " + strings.Join(ans, ","))
 	}
 	ans = allTopics("one/two")
-	if len(ans) != 11 {
-		t.Error("Expected 11 answers, got " + strings.Join(ans, ","))
+	if len(ans) != 7 {
+		t.Error("Expected 7 answers, got " + strings.Join(ans, ","))
 	}
 }

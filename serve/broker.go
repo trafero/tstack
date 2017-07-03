@@ -16,7 +16,7 @@ func NewBroker() *Broker {
 	b := &Broker{
 		clients:     make(map[string]*client),
 		retained:    make(map[string]*packet.Message),
-		deliverChan: make(chan *packet.Message),
+		deliverChan: make(chan *packet.Message, 10),
 	}
 	go b.deliveryRound()
 	return b
@@ -58,18 +58,29 @@ func (b *Broker) deliveryRound() {
 			b.Unlock()
 		}
 
-		b.RLock()
 		allMatchers := allTopics(msg.Topic) // All possible matches for msg.topic
+
+		b.RLock()
 		for _, c := range b.clients {
-			for _, matcher := range allMatchers {
-				c.mutex.Lock()
-				if sub, ok := c.subscriptions[matcher]; ok {
-					// Retain to false for all normal subscriptions MQTT-3.3.1-9
-					go c.send(msg, sub.QOS, false)
-				}
-				c.mutex.Unlock()
-			}
+			go checkDeliverToClient(c, allMatchers, msg)
 		}
 		b.RUnlock()
+	}
+}
+
+/*
+ * Deliver given message to the given client if one of the topic matchers
+ * matches one of the clients subscriptions
+ */
+func checkDeliverToClient(c *client, allMatchers []string, msg *packet.Message) {
+	for _, matcher := range allMatchers {
+		c.mutex.Lock()
+		if sub, ok := c.subscriptions[matcher]; ok {
+			// Re-package the message with the correct QOS (matching the subscription) and retain
+			// Retain to false for all normal subscriptions (MQTT-3.3.1-9)
+			m := repackage(msg, sub.QOS, false)
+			c.deliveryChannel <- m
+		}
+		c.mutex.Unlock()
 	}
 }

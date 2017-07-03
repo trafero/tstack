@@ -1,48 +1,42 @@
 package serve
 
 import (
+	"github.com/gomqtt/packet"
 	"math"
 	"strings"
 )
 
 func matches(matcher string, topic string) bool {
-	matcherlevels := strings.Split(matcher, "/")
-	topiclevels := strings.Split(topic, "/")
-	if len(matcherlevels) > len(topiclevels) {
-		// Case of matcher has more levels than topic
-		return false
-	}
-	for i := 0; i < len(topiclevels); i++ {
-		// The Server MUST NOT match Topic Filters starting with a wildcard
-		// character (# or +) with Topic Names beginning with a $ character
-		// [MQTT-4.7.2-1].
-		if i == 0 && strings.HasPrefix(topiclevels[0], "$") {
-			if matcherlevels[0] == "#" || matcherlevels[0] == "+" {
-				return false
-			}
-		}
-		// Rights levels are not deep enough
-		if len(matcherlevels) <= i {
-			return false
-		}
-		// Wildcard here on in, so match everything
-		if matcherlevels[i] == "#" {
+
+	matchingPatterns := allTopics(topic)
+	for _, m := range matchingPatterns {
+		if m == matcher {
 			return true
 		}
-		// Topics do not match, and not a topic level wildcard
-		if matcherlevels[i] != "+" && matcherlevels[i] != topiclevels[i] {
-			return false
-		}
 	}
-	return true
+	return false
 }
 
 /*
  * allTopics returns a list of all possible matches for the given topic,
  * including the possible wildcard matches
+ *
+ * Compiling a list of possible matches is faster if used several times,
+ * for example, against many client authorization rules
+ *
  */
 func allTopics(topic string) []string {
 	topics := strings.Split(topic, "/")
+	systemTopic := ""
+
+	// MQTT-4.7.2-1 topics begining with $ should not match on wildcard
+	// Remove the first topic if this is the case and then append it to the
+	// answers at the end
+	if strings.HasPrefix(topics[0], "$") {
+		systemTopic = topics[0]
+		topics = topics[1 : len(topics)-1]
+	}
+
 	numTopics := len(topics)
 	all := make([]string, 0)
 	wtop := addIntopicWilds(topics)
@@ -56,6 +50,14 @@ func allTopics(topic string) []string {
 		}
 	}
 	all = append(all, "#")
+
+	// MQTT-4.7.2-1 topics begining with $
+	if systemTopic != "" {
+		for i := 0; i < len(all); i++ {
+			all[i] = systemTopic + "/" + all[i]
+		}
+	}
+
 	return all
 }
 
@@ -86,4 +88,17 @@ func addIntopicWilds(topics []string) (ret [][]string) {
 		}
 	}
 	return ret
+}
+
+/*
+ * re-packages a message with the given QOS and retail flag.
+ */
+func repackage(msg *packet.Message, qos byte, retain bool) (m *packet.Message) {
+	m = &packet.Message{
+		Topic:   msg.Topic,
+		Payload: msg.Payload,
+		QOS:     qos,
+		Retain:  retain, // Retain to false for all normal subscriptions (MQTT-3.3.1-9)
+	}
+	return m
 }

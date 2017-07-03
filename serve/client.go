@@ -31,7 +31,7 @@ type client struct {
 	inboundInTransit      map[uint16]packet.Message // QOS 2 messages to be received (and passeed to broker)
 	outboundInTransit     map[uint16]packet.Message // QOS 2 messages to be sent
 	internalClientCounter int                       // For internal client ids (MQTT-3.1.3-6)
-
+	deliveryChannel       chan *packet.Message
 }
 
 func NewClient(a auth.Auth, b *Broker, c net.Conn) *client {
@@ -47,6 +47,7 @@ func NewClient(a auth.Auth, b *Broker, c net.Conn) *client {
 		subscriptions:     make(map[string]packet.Subscription),
 		packetIDCounter:   0,
 		keepalive:         0, // in seconds
+		deliveryChannel:   make(chan *packet.Message),
 	}
 }
 
@@ -56,8 +57,9 @@ func (c *client) HandleConnection() {
 
 	defer c.conn.Close()
 
-	c.encoder = packet.NewEncoder(c.conn)
+	go c.delivery()
 
+	c.encoder = packet.NewEncoder(c.conn)
 	decoder := packet.NewDecoder(c.conn) // Only required in this loop
 	for {
 		pkt, err = decoder.Read()
@@ -324,25 +326,22 @@ func (c *client) processDisconnect(pkt *packet.DisconnectPacket) {
 	c.conn.Close()
 }
 
-func (c *client) send(msg *packet.Message, qos byte, retain bool) {
-	p := packet.NewPublishPacket()
-
-	// Re-pack the messgae to use the reciever's QoS
-	// and set retain to false
-	m := &packet.Message{
-		Topic:   msg.Topic,
-		Payload: msg.Payload,
-		QOS:     qos,
-		Retain:  retain,
+/*
+ *  Wait for new messages on the deliverChan and send them to the client
+ */
+func (c *client) delivery() {
+	for {
+		msg := <-c.deliveryChannel
+		p := packet.NewPublishPacket()
+		p.Message = *msg
+		p.Dup = false
+		// Sec. 2.3.1
+		if msg.QOS > 0 {
+			p.PacketID = c.newPacketID()
+			c.outboundInTransit[p.PacketID] = p.Message
+		}
+		c.sendPacket(p)
 	}
-	p.Message = *m
-	p.Dup = false
-	// Sec. 2.3.1
-	if qos > 0 {
-		p.PacketID = c.newPacketID()
-		c.outboundInTransit[p.PacketID] = p.Message
-	}
-	c.sendPacket(p)
 }
 
 func (c *client) resend(packetID uint16, msg *packet.Message) {
@@ -360,7 +359,8 @@ func (c *client) sendRetained(topic string, qos uint8) {
 	for t, msg := range c.broker.retained {
 		if matches(topic, t) {
 			// Retain flag set to 1 [MQTT-3.3.1-8]
-			c.send(msg, qos, true)
+			m := repackage(msg, qos, true)
+			c.deliveryChannel <- m
 		}
 	}
 }

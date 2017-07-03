@@ -25,7 +25,7 @@ Possible matches for a given topic looks something like this:
 * Topic: one/two
 * Matches: one/two,+/two,one/+,+/+,one/#,+/#,#
 
-The number of matches is ```2^n^``` where ```n``` is the number of topics filters.  i.e. keep the number of topic filters low!
+The number of matches is 2 to the power of n, where n is the number of topics filters.  i.e. keep the number of topic filters low.
 
 ## Performance Statistics from tserve
 

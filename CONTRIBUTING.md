@@ -20,7 +20,7 @@ go get github.com/trafero/tstack/cmd/...
 * Please check that the [Paho functional tests](https://github.com/trafero/tstack/blob/master/docs/performance.md#functional-testing)
 pass before submitting a pull request
 
-## What Happens After You Create a Pull Request?
+## What Happens After You Create a Pull Request
 
 At this point you're waiting on us. We like to at least comment on pull requests within three business days. 
 We may suggest some changes or improvements or alternatives. One thing is for sure - we'll be delighted that you have

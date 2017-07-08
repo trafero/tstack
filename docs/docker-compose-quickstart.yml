@@ -21,7 +21,7 @@ services:
 
   # Registration service
   treg:
-    image: trafero/tstack
+    image: trafero/tstack-mqtt
     command: >
       /go/bin/treg
       --etcdhosts=http://etcd:2379
@@ -33,7 +33,7 @@ services:
 
   # tserve MQTT broker
   tserve:
-    image: trafero/tstack
+    image: trafero/tstack-mqtt
     command: >
       /go/bin/tserve
       --etcdhosts=http://etcd:2379

@@ -15,8 +15,8 @@ services:
 
   # tserve MQTT broker
   tserve:
-    build: .
-    # image: trafero/tstack
+    # build: .
+    image: trafero/tstack-mqtt
     volumes:
       - letsencrypt::/etc/letsencrypt
     command: >
@@ -33,8 +33,8 @@ services:
 
   # Registration service
   treg:
-    build: .
-    # image: trafero/tstack
+    # build: .
+    image: trafero/tstack-mqtt
     volumes:
       - letsencrypt:/etc/letsencrypt
     command: >
@@ -50,8 +50,8 @@ services:
 
   # Add a user for the consumer
   consumeruser:
-    build: .
-    # image: trafero/tstack
+    # build: .
+    image: trafero/tstack-mqtt
     command: >
       /go/bin/tuser
       -etcdhosts=$ETCD_HOSTS
@@ -61,8 +61,8 @@ services:
 
   # Consumes messages and adds them to graphite
   consumer:
-    build: .
-    #image: trafero/tstack
+    # build: .
+    image: trafero/tstack-mqtt
     command: >
       /go/bin/tconsume
       -ctype=graphite

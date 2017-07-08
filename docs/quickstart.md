@@ -1,8 +1,6 @@
 # Quick Start Guide
 
-A [docker image](https://hub.docker.com/r/trafero/tstack/) contains the tstack components. Using docker-compose with this image is the fastest way to get started.
-
-Note that this stack does not use a secure (encrypted) MQTT connection, so is not suitable for live use, but is a great way to get started locally.
+A [docker image](https://hub.docker.com/r/trafero/tstack-mqtt/) contains the tstack components. Using docker-compose with this image is the fastest way to get started.
 
 For a more complete stack with encryption, check out [../docker-compose.yml.dist](../docker-compose.yml.dist) and it's associated [env file](../env.dist).
 

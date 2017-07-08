@@ -11,13 +11,13 @@ The application takes the following command line options:
 
 ```
   -devtype string
-    	Device type (e.g. testdevice) (default "unknown")
+        Device type (e.g. testdevice) (default "unknown")
   -regkey string
-    	Registration key
+        Registration key
   -regservice string
-    	Registration service (e.g. http://localhost:8000/register.json)
+        Registration service (e.g. http://localhost:8000/register.json)
   -verifytls
-    	Verify MQTT server TLS certificate name (default true)
+        Verify MQTT server TLS certificate name (default true)
 ```
 
 
@@ -29,7 +29,7 @@ If you're running as a non-privileged user, you'll need to create the configurat
 sudo mkdir /etc/trafero && sudo chown $USER /etc/trafero
 ```
 
-The command line tool can be found in the [trafero/tstack](https://hub.docker.com/r/trafero/tstack/) docker image.
+The command line tool can be found in the [trafero/tstack-mqtt](https://hub.docker.com/r/trafero/tstack-mqtt/) docker image.
 
 Change REGISTRATION_KEY and TSERVE_HOST in the following:
 

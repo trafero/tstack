@@ -37,7 +37,6 @@ To run without encryption and no authentication:
 tserve -addr=0.0.0.0:1883 -authentication=false
 ```
 
-
 To run without encryption and using a local etcd key-value store:
 
 ```

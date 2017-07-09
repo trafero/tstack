@@ -2,7 +2,7 @@
 
 A [docker image](https://hub.docker.com/r/trafero/tstack-mqtt/) contains the tstack components. Using docker-compose with this image is the fastest way to get started.
 
-For a more complete stack with encryption, check out [../docker-compose.yml.dist](../docker-compose.yml.dist) and it's associated [env file](../env.dist).
+For a more complete docker compose example with encryption, check out [../docker-compose.yml.dist](../docker-compose.yml.dist) and it's associated [env file](../env.dist).
 
 ## 1: Docker Compose
 

@@ -40,3 +40,7 @@ To start the tserve service:
 ```
 service tserve start
 ```
+
+# Requirements
+
+For authentication, etcd will also need to be installed.

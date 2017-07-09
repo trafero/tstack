@@ -1,8 +1,11 @@
 # tstack
 
-Tstack consists of several components:
+There's a [quickstart](quickstart.md) guide to get a stack running quickly with docker.
 
 <img src="tstack.png"  width="100%" />
+
+
+For more detailed information, there is documentation for the various Tstack components:
 
 * [tserve](tserve.md) - An MQTT broker
 * [treg](treg.md) - RESTful registration service
@@ -11,10 +14,9 @@ Tstack consists of several components:
 * [tconsume](tconsume.md) - Command line MQTT consumer with a number of backends
 * [tpublish](tpublish.md) - Command line MQTT message publisher
 
-There's a [quickstart](quickstart.md) guide to get a stack running quickly with docker.
 
-Also see:
+...and also:
 
-* [frequently asked questions](faq.md)
+* [Installation Guide](installation.md)
+* [Frequently Asked Questions](faq.md)
 * [Notes on performance tuning as well as testing](performance.md)
-

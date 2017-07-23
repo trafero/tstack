@@ -15,3 +15,9 @@ Code is written in Go.
 
 * Requires Go >= 1.8
 * CLI applications are under the cmd directory
+
+
+### Example
+
+
+[![Youtube video](docs/screenshot.png)](https://youtu.be/r74YzlcMBiU)
